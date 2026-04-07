@@ -1,0 +1,66 @@
+export type StageKey = string;
+
+export type StageCategory = {
+  id: string;
+  value: StageKey;
+  label: string;
+};
+
+export type StageItem = {
+  id: string;
+  code: string;
+  name: string;
+  article?: string;
+  duration: string;
+  mood: string;
+  stage: StageKey;
+  videoUrl?: string;
+};
+
+export type StageFilters = {
+  keyword: string;
+  dateFrom: string;
+  dateTo: string;
+  stage: string;
+  area: string;
+  article: string;
+};
+
+export type HistoryItem = {
+  id: string;
+  range: string;
+  label: string;
+  committed: boolean;
+  locked?: boolean;
+};
+
+export type ControlSessionItem = {
+  id: string;
+  stageCode: string;
+  elapsed: number;
+  isRunning: boolean;
+  segmentStart: number;
+  nva: number | null;
+  va: number | null;
+  skip: number | null;
+};
+
+export type CtRow = {
+  id: string;
+  stageItemId?: string | null;
+  no: string;
+  partName: string;
+  nvaValues: number[];
+  vaValues: number[];
+  machineType: string;
+  confirmed: boolean;
+  done: boolean;
+};
+
+export type SelectedCtCell = {
+  rowId: string;
+  stageItemId?: string | null;
+  rowNo: string;
+  columnIndex: number;
+  columnKey: string;
+};
