@@ -32,18 +32,38 @@ export class TableCtController {
   }
 
   @Patch(':id/metrics')
-  updateMetrics(@Param('id') id: string, @Body() payload: UpdateTableCtMetricsDto) {
-    return this.tableCtService.updateMetrics(id, payload);
+  updateMetrics(
+    @Param('id') id: string,
+    @Body() payload: UpdateTableCtMetricsDto,
+    @Req()
+    request: Request & {
+      user: JwtUserPayload;
+    },
+  ) {
+    return this.tableCtService.updateMetrics(id, payload, request.user.category);
   }
 
   @Patch(':id/done')
-  markDone(@Param('id') id: string) {
-    return this.tableCtService.markDone(id);
+  markDone(
+    @Param('id') id: string,
+    @Req()
+    request: Request & {
+      user: JwtUserPayload;
+    },
+  ) {
+    return this.tableCtService.markDone(id, request.user.category);
   }
 
   @Post('export')
-  async exportWorkbook(@Body() payload: ExportTableCtDto, @Res() response: Response) {
-    const file = await this.tableCtService.exportWorkbook(payload);
+  async exportWorkbook(
+    @Body() payload: ExportTableCtDto,
+    @Req()
+    request: Request & {
+      user: JwtUserPayload;
+    },
+    @Res() response: Response,
+  ) {
+    const file = await this.tableCtService.exportWorkbook(payload, request.user.category);
 
     response.setHeader(
       'Content-Type',
@@ -58,8 +78,15 @@ export class TableCtController {
   }
 
   @Post('export-lsa')
-  async exportLsaWorkbook(@Body() payload: ExportTableCtDto, @Res() response: Response) {
-    const file = await this.tableCtService.exportLsaWorkbook(payload);
+  async exportLsaWorkbook(
+    @Body() payload: ExportTableCtDto,
+    @Req()
+    request: Request & {
+      user: JwtUserPayload;
+    },
+    @Res() response: Response,
+  ) {
+    const file = await this.tableCtService.exportLsaWorkbook(payload, request.user.category);
 
     response.setHeader(
       'Content-Type',

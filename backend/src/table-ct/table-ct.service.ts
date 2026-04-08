@@ -141,7 +141,7 @@ export class TableCtService implements OnModuleInit {
     };
   }
 
-  async updateMetrics(id: string, payload: UpdateTableCtMetricsDto) {
+  async updateMetrics(id: string, payload: UpdateTableCtMetricsDto, category?: string) {
     await this.ensureTable();
 
     if (!id?.trim()) {
@@ -175,24 +175,26 @@ export class TableCtService implements OnModuleInit {
     const currentVaValue =
       typeof existingRow[vaColumn] === 'number' ? Number(existingRow[vaColumn]) : 0;
 
+    const metricUpdate = {
+      ...(typeof payload.nvaValue === 'number'
+        ? {
+            [nvaColumn]: roundToTwoDecimals(
+              Math.max(0, currentNvaValue + payload.nvaValue),
+            ),
+          }
+        : {}),
+      ...(typeof payload.vaValue === 'number'
+        ? {
+            [vaColumn]: roundToTwoDecimals(
+              Math.max(0, currentVaValue + payload.vaValue),
+            ),
+          }
+        : {}),
+    };
+
     const updatedRow = await this.prismaService.tableCT.update({
       where: { id },
-      data: {
-        ...(typeof payload.nvaValue === 'number'
-          ? {
-              [nvaColumn]: roundToTwoDecimals(
-                Math.max(0, currentNvaValue + payload.nvaValue),
-              ),
-            }
-          : {}),
-        ...(typeof payload.vaValue === 'number'
-          ? {
-              [vaColumn]: roundToTwoDecimals(
-                Math.max(0, currentVaValue + payload.vaValue),
-              ),
-            }
-          : {}),
-      },
+      data: metricUpdate,
     });
 
     return {
@@ -241,7 +243,7 @@ export class TableCtService implements OnModuleInit {
     return { success: true };
   }
 
-  async markDone(id: string) {
+  async markDone(id: string, category?: string) {
     await this.ensureTable();
 
     if (!id?.trim()) {
@@ -256,11 +258,20 @@ export class TableCtService implements OnModuleInit {
       throw new NotFoundException('Table row was not found.');
     }
 
+    const normalizedCategory = normalizeCategory(category);
+    const data =
+      !existingRow.done && normalizedCategory === 'COSTING'
+        ? {
+            ...buildCostingDoneUpdate(existingRow),
+            done: true,
+          }
+        : {
+            done: !existingRow.done,
+          };
+
     const updatedRow = await this.prismaService.tableCT.update({
       where: { id },
-      data: {
-        done: !existingRow.done,
-      },
+      data,
     });
 
     return {
@@ -334,7 +345,7 @@ export class TableCtService implements OnModuleInit {
     return { success: true, id };
   }
 
-  async exportWorkbook(payload: ExportTableCtDto) {
+  async exportWorkbook(payload: ExportTableCtDto, category?: string) {
     await this.ensureTable();
 
     const normalizedStage = payload.stage?.trim().toUpperCase();
@@ -395,10 +406,12 @@ export class TableCtService implements OnModuleInit {
     populateCycleTimeSection(
       worksheet,
       orderedRows.map((row) => this.mapRow(row)),
+      category,
     );
     populateMachineSection(
       worksheet,
       orderedRows.map((row) => this.mapRow(row)),
+      category,
     );
 
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
@@ -410,7 +423,7 @@ export class TableCtService implements OnModuleInit {
     };
   }
 
-  async exportLsaWorkbook(payload: ExportTableCtDto) {
+  async exportLsaWorkbook(payload: ExportTableCtDto, category?: string) {
     await this.ensureTable();
 
     const normalizedStage = payload.stage?.trim().toUpperCase();
@@ -499,7 +512,7 @@ export class TableCtService implements OnModuleInit {
     worksheet.getCell('S6').value = 0;
     worksheet.getCell('T6').value = '0%';
 
-    populateLsaDetailSection(worksheet, mappedRows);
+    populateLsaDetailSection(worksheet, mappedRows, category);
 
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
@@ -714,6 +727,7 @@ export class TableCtService implements OnModuleInit {
 function populateCycleTimeSection(
   worksheet: ExcelJS.Worksheet,
   rows: ReturnType<TableCtService['mapRow']>[],
+  category?: string,
 ) {
   const templateStart = 12;
   const templateEnd = 14;
@@ -749,18 +763,21 @@ function populateCycleTimeSection(
       partName: row.partName,
       type: 'NVA',
       values: row.nvaValues,
+      category,
     });
     fillCycleRow(worksheet, targetRows[1], {
       progress: '',
       partName: '',
       type: 'VA',
       values: row.vaValues,
+      category,
     });
     fillCycleRow(worksheet, targetRows[2], {
       progress: 'Total',
       partName: '',
       type: '',
       values: totalValues,
+      category,
     });
   }
 }
@@ -768,6 +785,7 @@ function populateCycleTimeSection(
 function populateMachineSection(
   worksheet: ExcelJS.Worksheet,
   rows: ReturnType<TableCtService['mapRow']>[],
+  category?: string,
 ) {
   const templateStart = 17;
   const nextSectionStart = 24;
@@ -793,7 +811,10 @@ function populateMachineSection(
       row.machineType === 'Select..' ? '' : row.machineType;
     worksheet.getCell(`D${targetRow}`).value = row.partName;
     worksheet.getCell(`I${targetRow}`).value = row.machineType === 'Select..' ? '' : 1;
-    worksheet.getCell(`K${targetRow}`).value = formatAverageNumber(totalValues);
+    worksheet.getCell(`K${targetRow}`).value = formatAverageNumber(
+      totalValues,
+      category,
+    );
     worksheet.getCell(`M${targetRow}`).value = '';
   }
 }
@@ -806,6 +827,7 @@ function fillCycleRow(
     partName: string;
     type: string;
     values: number[];
+    category?: string;
   },
 ) {
   worksheet.getCell(`A${rowNumber}`).value = payload.progress;
@@ -816,7 +838,10 @@ function fillCycleRow(
     worksheet.getCell(rowNumber, 13 + index).value = roundToTwoDecimals(value);
   });
 
-  worksheet.getCell(`W${rowNumber}`).value = formatAverageNumber(payload.values);
+  worksheet.getCell(`W${rowNumber}`).value = formatAverageNumber(
+    payload.values,
+    payload.category,
+  );
 }
 
 function copyRowStyle(
@@ -870,19 +895,36 @@ function mergeIfNeeded(worksheet: ExcelJS.Worksheet, range: string) {
   }
 }
 
-function formatAverageNumber(values: number[]) {
-  if (values.length === 0) {
+function formatAverageNumber(values: number[], category?: string) {
+  const normalizedCategory = category?.trim().toUpperCase() ?? '';
+  if (normalizedCategory === 'COSTING') {
+    if (values.length === 0) {
+      return 0;
+    }
+
+    return roundToTwoDecimals(sumValues(values) / 10);
+  }
+
+  const shouldUsePositiveOnly =
+    normalizedCategory === 'FF28' || normalizedCategory === 'LSA';
+  const valuesForAverage = shouldUsePositiveOnly
+    ? values.filter((value) => value > 0)
+    : values;
+
+  if (valuesForAverage.length === 0) {
     return 0;
   }
 
   return roundToTwoDecimals(
-    values.reduce((sum, value) => sum + value, 0) / values.length,
+    valuesForAverage.reduce((sum, value) => sum + value, 0) /
+      valuesForAverage.length,
   );
 }
 
 function populateLsaDetailSection(
   worksheet: ExcelJS.Worksheet,
   rows: ReturnType<TableCtService['mapRow']>[],
+  category?: string,
 ) {
   const templateStart = 9;
   const firstExtraRow = 10;
@@ -908,7 +950,10 @@ function populateLsaDetailSection(
     const va = roundToTwoDecimals(sumValues(row.vaValues));
     const nva = roundToTwoDecimals(sumValues(row.nvaValues));
     const loss = 0;
-    const ct = roundToTwoDecimals(va + nva + loss);
+    const totalValues = row.nvaValues.map((value, ctIndex) =>
+      roundToTwoDecimals(value + (row.vaValues[ctIndex] ?? 0)),
+    );
+    const ct = formatAverageNumber(totalValues, category);
     const pph = ct > 0 ? Math.round(3600 / ct) : 0;
     const pair = ct > 0 ? roundToTwoDecimals((8 * 3600) / ct) : 0;
 
@@ -948,6 +993,127 @@ function populateLsaDetailSection(
 
 function sumValues(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0);
+}
+
+function normalizeCategory(category?: string) {
+  return category?.trim().toUpperCase() ?? '';
+}
+
+function buildCostingDoneUpdate(
+  existingRow: {
+    ct1: number;
+    ct2: number;
+    ct3: number;
+    ct4: number;
+    ct5: number;
+    ct6: number;
+    ct7: number;
+    ct8: number;
+    ct9: number;
+    ct10: number;
+    vaCt1: number;
+    vaCt2: number;
+    vaCt3: number;
+    vaCt4: number;
+    vaCt5: number;
+    vaCt6: number;
+    vaCt7: number;
+    vaCt8: number;
+    vaCt9: number;
+    vaCt10: number;
+  },
+) {
+  const nextData: Record<string, number> = {};
+
+  const nextNvaValues = completeCostingValues([
+    existingRow.ct1,
+    existingRow.ct2,
+    existingRow.ct3,
+    existingRow.ct4,
+    existingRow.ct5,
+    existingRow.ct6,
+    existingRow.ct7,
+    existingRow.ct8,
+    existingRow.ct9,
+    existingRow.ct10,
+  ]);
+  const nextVaValues = completeCostingValues([
+    existingRow.vaCt1,
+    existingRow.vaCt2,
+    existingRow.vaCt3,
+    existingRow.vaCt4,
+    existingRow.vaCt5,
+    existingRow.vaCt6,
+    existingRow.vaCt7,
+    existingRow.vaCt8,
+    existingRow.vaCt9,
+    existingRow.vaCt10,
+  ]);
+
+  nextNvaValues.forEach((value, index) => {
+    nextData[`ct${index + 1}`] = value;
+  });
+
+  nextVaValues.forEach((value, index) => {
+    nextData[`vaCt${index + 1}`] = value;
+  });
+
+  return nextData;
+}
+
+function completeCostingValues(currentValues: number[]) {
+  const nextValues = currentValues.map((value) => roundToTwoDecimals(Math.max(0, value)));
+  let filledCount = 0;
+  for (const value of nextValues) {
+    if (value > 0) {
+      filledCount += 1;
+      continue;
+    }
+    break;
+  }
+
+  if (filledCount === 0 || filledCount >= 10) {
+    return nextValues;
+  }
+
+  const seedValues = nextValues.slice(0, filledCount);
+  const seedAverage = roundToTwoDecimals(sumValues(seedValues) / seedValues.length);
+  const targetTotal = roundToTwoDecimals(seedAverage * 10);
+
+  let generatedValues: number[] | null = null;
+
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const trial = [...nextValues];
+
+    for (let index = filledCount; index <= 8; index += 1) {
+      trial[index] = roundToTwoDecimals(
+        Math.max(0, seedAverage + randomBetween(-1, 1)),
+      );
+    }
+
+    const remainingTotal = roundToTwoDecimals(
+      targetTotal - sumValues(trial.slice(0, 9)),
+    );
+
+    if (remainingTotal >= 0) {
+      trial[9] = remainingTotal;
+      generatedValues = trial;
+      break;
+    }
+  }
+
+  if (!generatedValues) {
+    generatedValues = [...nextValues];
+    for (let index = filledCount; index <= 9; index += 1) {
+      generatedValues[index] = seedAverage;
+    }
+  }
+
+  return generatedValues.map((value) => roundToTwoDecimals(Math.max(0, value)));
+}
+
+function randomBetween(min: number, max: number) {
+  return Math.random() * (max - min) + min;
 }
 
 function parseTableIdentity(fileName: string, fallbackCode: string) {

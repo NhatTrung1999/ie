@@ -278,12 +278,11 @@ export function ControlPanel({
       return;
     }
 
-    setElapsed(0);
     setNva(null);
     setVa(null);
     setSkip(null);
     setSegmentStart(roundToTwoDecimals(playbackState.currentTime));
-    onPause();
+    setSessionError('');
   };
 
   const handleStop = () => {

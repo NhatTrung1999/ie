@@ -429,7 +429,10 @@ export function CtTablePanel({
 
                   <td className="w-14 py-1.5 align-middle text-center">
                     <span className="text-xs font-mono text-gray-400">
-                      {formatAverage(type === 'NVA' ? row.nvaValues : row.vaValues)}
+                      {formatAverage(
+                        type === 'NVA' ? row.nvaValues : row.vaValues,
+                        sessionCategory,
+                      )}
                     </span>
                   </td>
 
@@ -549,11 +552,28 @@ function formatMetricValue(value: number) {
   return value.toFixed(2);
 }
 
-function formatAverage(values: number[]) {
-  if (values.length === 0) {
+function formatAverage(values: number[], category?: string) {
+  const normalizedCategory = category?.trim().toUpperCase() ?? '';
+  if (normalizedCategory === 'COSTING') {
+    if (values.length === 0) {
+      return '0.00';
+    }
+
+    return (values.reduce((sum, value) => sum + value, 0) / 10).toFixed(2);
+  }
+
+  const shouldUsePositiveOnly =
+    normalizedCategory === 'FF28' || normalizedCategory === 'LSA';
+  const valuesForAverage = shouldUsePositiveOnly
+    ? values.filter((value) => value > 0)
+    : values;
+
+  if (valuesForAverage.length === 0) {
     return '0.00';
   }
 
-  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const average =
+    valuesForAverage.reduce((sum, value) => sum + value, 0) /
+    valuesForAverage.length;
   return average.toFixed(2);
 }
