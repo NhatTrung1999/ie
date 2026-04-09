@@ -110,6 +110,12 @@ export async function exportLsaWorkbook(payload: {
   stage?: StageKey;
   stageItemId?: string | null;
   rowIds: string[];
+  estimateOutputPairs?: number;
+  workingTimeSeconds?: number;
+  taktTimeSeconds?: number;
+  manpowerStandardLabor?: number;
+  capacityPerHour?: number;
+  totalCtSeconds?: number;
 }) {
   try {
     const response = await apiClient.post('/table-ct/export-lsa', payload, {

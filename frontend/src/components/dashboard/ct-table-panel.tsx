@@ -5,6 +5,7 @@ import {
   GripVertical,
   RefreshCw,
   Trash2,
+  X,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -62,6 +63,10 @@ export function CtTablePanel({
     }));
   const [draggingNo, setDraggingNo] = useState<string | null>(null);
   const [machineTypes, setMachineTypes] = useState<MachineTypeItem[]>([]);
+  const [isLsaExportOpen, setIsLsaExportOpen] = useState(false);
+  const [estimateOutputInput, setEstimateOutputInput] = useState('0');
+  const [lsaExportError, setLsaExportError] = useState('');
+  const [isExportingLsa, setIsExportingLsa] = useState(false);
   const activeRow = rows.find((row) => row.stageItemId === activeStageItemId)?.no ?? null;
   const isLsaCategory = sessionCategory.trim().toUpperCase() === 'LSA';
 
@@ -182,16 +187,62 @@ export function CtTablePanel({
     });
   };
 
+  const workingTimeSeconds = 27000;
+  const totalCtSeconds = useMemo(
+    () =>
+      roundToTwoDecimals(
+        rows.reduce((sum, row) => {
+          const totalValues = row.nvaValues.map(
+            (value, index) => value + (row.vaValues[index] ?? 0),
+          );
+          const baseCt = calculateAverageNumber(totalValues, sessionCategory);
+          const lossRate = getMachineTypeLossRate(row.machineType, machineTypeOptions);
+          return sum + baseCt * (1 + lossRate);
+        }, 0),
+      ),
+    [machineTypeOptions, rows, sessionCategory],
+  );
+  const estimateOutputPairs = Math.max(0, Number(estimateOutputInput) || 0);
+  const taktTimeSeconds =
+    estimateOutputPairs > 0 ? roundToTwoDecimals(3600 / estimateOutputPairs) : 0;
+  const manpowerStandardLabor =
+    taktTimeSeconds > 0 ? Math.ceil(totalCtSeconds / taktTimeSeconds) : 0;
+  const capacityPerHour =
+    totalCtSeconds > 0 ? Math.round(3600 / totalCtSeconds) : 0;
+
   const handleExportLsa = () => {
     if (rows.length === 0) {
       return;
     }
 
-    void exportLsaWorkbook({
-      stage: activeStage,
-      stageItemId: activeStageItemId,
-      rowIds: rows.map((row) => row.id),
-    }).then((blob) => {
+    setLsaExportError('');
+    setIsLsaExportOpen(true);
+  };
+
+  const handleConfirmExportLsa = async () => {
+    if (rows.length === 0) {
+      return;
+    }
+
+    if (estimateOutputPairs < 0) {
+      setLsaExportError('Estimate Output must be 0 or greater.');
+      return;
+    }
+
+    try {
+      setIsExportingLsa(true);
+      const blob = await exportLsaWorkbook({
+        stage: activeStage,
+        stageItemId: activeStageItemId,
+        rowIds: rows.map((row) => row.id),
+        estimateOutputPairs,
+        workingTimeSeconds,
+        taktTimeSeconds,
+        manpowerStandardLabor,
+        capacityPerHour,
+        totalCtSeconds,
+      });
+
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
@@ -202,14 +253,29 @@ export function CtTablePanel({
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-    });
+
+      setIsLsaExportOpen(false);
+      setLsaExportError('');
+    } catch (error) {
+      setLsaExportError(
+        error instanceof Error ? error.message : 'Unable to export LSA workbook.',
+      );
+    } finally {
+      setIsExportingLsa(false);
+    }
+  };
+
+  const handleCancelExportLsa = () => {
+    setIsLsaExportOpen(false);
+    setLsaExportError('');
   };
 
   return (
-    <div
-      className="flex min-h-[360px] flex-col overflow-hidden border-t border-gray-200 bg-white lg:h-[38%] lg:min-h-0"
-    >
-      <div className="flex shrink-0 flex-col gap-3 border-b border-gray-100 px-3 py-2.5 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
+    <>
+      <div
+        className="flex min-h-[360px] flex-col overflow-hidden border-t border-gray-200 bg-white lg:h-[38%] lg:min-h-0"
+      >
+        <div className="flex shrink-0 flex-col gap-3 border-b border-gray-100 px-3 py-2.5 sm:px-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-1.5">
           <div className="h-3.5 w-1 rounded-full bg-linear-to-b from-blue-500 to-violet-500" />
           <span className="text-[11px] font-bold tracking-widest text-gray-500 uppercase">
@@ -255,9 +321,9 @@ export function CtTablePanel({
             </Button>
           )}
         </div>
-      </div>
+        </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto">
         {tableRowsError ? (
           <div className="border-b border-amber-100 bg-amber-50 px-4 py-2 text-[11px] font-medium text-amber-700">
             {tableRowsError}
@@ -537,8 +603,104 @@ export function CtTablePanel({
             )}
           </tbody>
         </table>
+        </div>
       </div>
-    </div>
+
+      {isLsaExportOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 px-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-[460px] overflow-hidden rounded-[22px] border border-slate-200/80 bg-white shadow-[0_24px_72px_rgba(15,23,42,0.16)]">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="h-4 w-1 rounded-full bg-gradient-to-b from-teal-500 to-blue-500" />
+                    <span className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
+                      LSA Export
+                    </span>
+                  </div>
+                  <h2 className="text-[20px] font-semibold tracking-tight text-slate-700">
+                    Modal Estimate Output
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelExportLsa}
+                  className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4 px-5 py-5">
+              <label className="block space-y-2">
+                <span className="text-[13px] font-medium text-slate-700">
+                  Estimate Output (pairs)
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  value={estimateOutputInput}
+                  onChange={(event) => setEstimateOutputInput(event.target.value)}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                />
+              </label>
+
+              <div className="space-y-0 rounded-2xl border border-slate-100 bg-white">
+                <MetricRow
+                  label="Working Time"
+                  value={`${formatNumber(workingTimeSeconds)} sec`}
+                />
+                <MetricRow
+                  label="Takt Time"
+                  value={`${formatNumber(roundToTwoDecimals(taktTimeSeconds))} sec`}
+                />
+                <MetricRow
+                  label="Total CT"
+                  value={`${formatNumber(roundToTwoDecimals(totalCtSeconds))} sec`}
+                  dashed
+                />
+                <MetricRow
+                  label="Manpower Standard labor"
+                  value={`${formatNumber(roundToTwoDecimals(manpowerStandardLabor))} persons`}
+                  accent
+                  dashed
+                />
+                <MetricRow
+                  label="Capacity"
+                  value={`${formatNumber(roundToTwoDecimals(capacityPerHour))} pairs/hour`}
+                />
+              </div>
+
+              {lsaExportError ? (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-500">
+                  {lsaExportError}
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmExportLsa()}
+                  disabled={isExportingLsa}
+                  className="h-11 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(16,185,129,0.22)] transition hover:from-emerald-600 hover:to-emerald-700 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
+                >
+                  {isExportingLsa ? 'Exporting...' : 'Confirm'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelExportLsa}
+                  disabled={isExportingLsa}
+                  className="h-11 rounded-2xl bg-gradient-to-r from-rose-500 to-red-500 text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(239,68,68,0.2)] transition hover:from-rose-600 hover:to-red-600 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -553,13 +715,17 @@ function formatMetricValue(value: number) {
 }
 
 function formatAverage(values: number[], category?: string) {
+  return calculateAverageNumber(values, category).toFixed(2);
+}
+
+function calculateAverageNumber(values: number[], category?: string) {
   const normalizedCategory = category?.trim().toUpperCase() ?? '';
   if (normalizedCategory === 'COSTING') {
     if (values.length === 0) {
-      return '0.00';
+      return 0;
     }
 
-    return (values.reduce((sum, value) => sum + value, 0) / 10).toFixed(2);
+    return values.reduce((sum, value) => sum + value, 0) / 10;
   }
 
   const shouldUsePositiveOnly =
@@ -569,11 +735,73 @@ function formatAverage(values: number[], category?: string) {
     : values;
 
   if (valuesForAverage.length === 0) {
-    return '0.00';
+    return 0;
   }
 
-  const average =
+  return (
     valuesForAverage.reduce((sum, value) => sum + value, 0) /
-    valuesForAverage.length;
-  return average.toFixed(2);
+    valuesForAverage.length
+  );
+}
+
+function roundToTwoDecimals(value: number) {
+  return Number(value.toFixed(2));
+}
+
+function parseLossRate(value?: string) {
+  if (!value) {
+    return 0;
+  }
+
+  const normalized = value.trim().replace('%', '');
+  const parsed = Number(normalized);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+
+  return parsed > 1 ? parsed / 100 : parsed;
+}
+
+function getMachineTypeLossRate(machineType: string, machineTypes: MachineTypeItem[]) {
+  const matched = machineTypes.find((item) => item.label === machineType);
+  return parseLossRate(matched?.loss);
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function MetricRow({
+  label,
+  value,
+  dashed = false,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  dashed?: boolean;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-center justify-between gap-4 px-4 py-4',
+        dashed ? 'border-t border-dashed border-slate-200' : 'border-t border-slate-100 first:border-t-0',
+      )}
+    >
+      <span className="text-[15px] font-medium text-slate-700">{label}</span>
+      <span
+        className={cn(
+          'text-right text-[15px] font-semibold text-slate-800',
+          accent ? 'text-blue-600' : '',
+        )}
+      >
+        {value}
+      </span>
+    </div>
+  );
 }

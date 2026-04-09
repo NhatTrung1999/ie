@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle, Clock, Play, Square } from 'lucide-react';
+import { CheckCircle, Clock, Play, Square, X } from 'lucide-react';
 
 import type { PreviewPlaybackState } from '@/components/dashboard/preview-panel';
 import { cn } from '@/lib/utils';
@@ -66,7 +66,8 @@ export function ControlPanel({
   const dispatch = useAppDispatch();
   const saveTimeoutRef = useRef<number | null>(null);
   const seekBarRef = useRef<HTMLDivElement | null>(null);
-  const { selectedItem, selectedCtCell, selectedTableRow } = useAppSelector((state) => {
+  const { selectedItem, selectedCtCell, selectedTableRow, sessionCategory, activeStage } =
+    useAppSelector((state) => {
     const selectedTableRow = state.dashboard.selectedCtCell
       ? state.dashboard.tableRows.find((row) => row.id === state.dashboard.selectedCtCell?.rowId)
       : undefined;
@@ -77,6 +78,8 @@ export function ControlPanel({
       ),
       selectedCtCell: state.dashboard.selectedCtCell,
       selectedTableRow,
+      sessionCategory: state.auth.sessionUser.category,
+      activeStage: state.dashboard.activeStage,
     };
   });
   const [elapsed, setElapsed] = useState(0);
@@ -87,8 +90,15 @@ export function ControlPanel({
   const [sessionError, setSessionError] = useState('');
   const [isHydrating, setIsHydrating] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
+  const [isCuttingModalOpen, setIsCuttingModalOpen] = useState(false);
+  const [piecesInput, setPiecesInput] = useState('');
+  const [layersInput, setLayersInput] = useState('');
+  const [cuttingModalError, setCuttingModalError] = useState('');
 
   const isRunning = playbackState.isPlaying;
+  const isLsaCuttingFlow =
+    sessionCategory.trim().toUpperCase() === 'LSA' &&
+    activeStage.trim().toUpperCase() === 'CUTTING';
 
   useEffect(() => {
     const stageCode = selectedItem?.code;
@@ -244,7 +254,7 @@ export function ControlPanel({
     onPlay();
   };
 
-  const handleDone = async () => {
+  const applyDoneMetrics = async (nextNvaValue: number, nextVaValue: number) => {
     if (!selectedCtCell?.rowId || !selectedItem?.code || selectedTableRow?.confirmed) {
       return;
     }
@@ -253,8 +263,8 @@ export function ControlPanel({
       saveTableRowMetrics({
         id: selectedCtCell.rowId,
         columnIndex: selectedCtCell.columnIndex,
-        nvaValue: nva ?? 0,
-        vaValue: va ?? 0,
+        nvaValue: nextNvaValue,
+        vaValue: nextVaValue,
       }),
     );
 
@@ -283,6 +293,24 @@ export function ControlPanel({
     setSkip(null);
     setSegmentStart(roundToTwoDecimals(playbackState.currentTime));
     setSessionError('');
+    setCuttingModalError('');
+    setPiecesInput('');
+    setLayersInput('');
+    setIsCuttingModalOpen(false);
+  };
+
+  const handleDone = async () => {
+    if (!selectedCtCell?.rowId || !selectedItem?.code || selectedTableRow?.confirmed) {
+      return;
+    }
+
+    if (isLsaCuttingFlow && ((nva ?? 0) > 0 || (va ?? 0) > 0)) {
+      setCuttingModalError('');
+      setIsCuttingModalOpen(true);
+      return;
+    }
+
+    await applyDoneMetrics(nva ?? 0, va ?? 0);
   };
 
   const handleStop = () => {
@@ -340,6 +368,26 @@ export function ControlPanel({
     return formatPreciseTime(seconds);
   };
 
+  const handleCuttingModalDone = async () => {
+    const pieces = Number(piecesInput);
+    const layers = Number(layersInput);
+
+    if (!Number.isFinite(pieces) || pieces <= 0) {
+      setCuttingModalError('Number of pieces must be greater than 0.');
+      return;
+    }
+
+    if (!Number.isFinite(layers) || layers <= 0) {
+      setCuttingModalError('Number of layers must be greater than 0.');
+      return;
+    }
+
+    const multipliedNva = roundToTwoDecimals(((nva ?? 0) * pieces) / layers);
+    const multipliedVa = roundToTwoDecimals(((va ?? 0) * pieces) / layers);
+
+    await applyDoneMetrics(multipliedNva, multipliedVa);
+  };
+
   const metrics = [
     { label: 'NVA', value: nva, setter: setNva },
     { label: 'VA', value: va, setter: setVa },
@@ -392,7 +440,8 @@ export function ControlPanel({
   }, [hasVideoDuration, isRunning, isSeeking, onSeek, playbackState.duration]);
 
   return (
-    <div className="flex flex-col overflow-hidden border-t-2 border-gray-100">
+    <>
+      <div className="flex flex-col overflow-hidden border-t-2 border-gray-100">
       <div className="flex shrink-0 items-center gap-1.5 border-b border-gray-100 px-3 py-2.5">
         <div className="h-3.5 w-1 rounded-full bg-linear-to-b from-blue-500 to-violet-500" />
         <span className="text-[11px] font-bold tracking-widest text-gray-500 uppercase">
@@ -567,6 +616,95 @@ export function ControlPanel({
           })}
         </div>
       </div>
-    </div>
+      </div>
+
+      {isCuttingModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 px-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-[432px] overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.18)]">
+            <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="h-4 w-1 rounded-full bg-gradient-to-b from-blue-500 to-violet-500" />
+                    <span className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
+                      LSA Cutting
+                    </span>
+                  </div>
+                  <h2 className="text-[22px] font-semibold tracking-tight text-slate-700">
+                    Cutting Parameters
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCuttingModalOpen(false);
+                    setCuttingModalError('');
+                  }}
+                  className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4 px-5 py-5 sm:px-6">
+              <label className="block space-y-2">
+                <span className="text-[14px] font-medium text-slate-700">
+                  Number of pieces
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  value={piecesInput}
+                  onChange={(event) => setPiecesInput(event.target.value)}
+                  placeholder="Enter your pieces..."
+                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-[14px] font-medium text-slate-700">
+                  Number of layers
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  value={layersInput}
+                  onChange={(event) => setLayersInput(event.target.value)}
+                  placeholder="Enter your layers..."
+                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                />
+              </label>
+
+              {cuttingModalError ? (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-500">
+                  {cuttingModalError}
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={handleCuttingModalDone}
+                  className="h-12 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(16,185,129,0.22)] transition hover:from-emerald-600 hover:to-emerald-700"
+                >
+                  Done
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCuttingModalOpen(false);
+                    setCuttingModalError('');
+                  }}
+                  className="h-12 rounded-2xl bg-gradient-to-r from-rose-500 to-red-500 text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(239,68,68,0.2)] transition hover:from-rose-600 hover:to-red-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

@@ -475,23 +475,52 @@ export class TableCtService implements OnModuleInit {
     }
 
     const mappedRows = orderedRows.map((row) => this.mapRow(row));
-    const stageTotalSeconds = roundToTwoDecimals(
+    const computedStageTotalSeconds = roundToTwoDecimals(
       mappedRows.reduce(
         (sum, row) => sum + sumValues(row.nvaValues) + sumValues(row.vaValues),
         0,
       ),
     );
-    const pairsPerPerson8h =
-      stageTotalSeconds > 0 ? roundToTwoDecimals(8 * 3600 / stageTotalSeconds) : 0;
+    const stageTotalSeconds =
+      typeof payload.totalCtSeconds === 'number' && Number.isFinite(payload.totalCtSeconds)
+        ? payload.totalCtSeconds
+        : computedStageTotalSeconds;
+    const estimateOutputPairs =
+      typeof payload.estimateOutputPairs === 'number' && Number.isFinite(payload.estimateOutputPairs)
+        ? payload.estimateOutputPairs
+        : 0;
+    const taktTimeSeconds =
+      typeof payload.taktTimeSeconds === 'number' && Number.isFinite(payload.taktTimeSeconds)
+        ? payload.taktTimeSeconds
+        : estimateOutputPairs > 0
+          ? roundToTwoDecimals(3600 / estimateOutputPairs)
+          : 0;
+    const manpowerStandardLabor =
+      typeof payload.manpowerStandardLabor === 'number' &&
+      Number.isFinite(payload.manpowerStandardLabor)
+        ? payload.manpowerStandardLabor
+        : taktTimeSeconds > 0
+          ? Math.ceil(stageTotalSeconds / taktTimeSeconds)
+          : 0;
+    const capacityPerHour =
+      typeof payload.capacityPerHour === 'number' && Number.isFinite(payload.capacityPerHour)
+        ? payload.capacityPerHour
+        : stageTotalSeconds > 0
+          ? Math.round(3600 / stageTotalSeconds)
+          : 0;
+    const workingTimeSeconds =
+      typeof payload.workingTimeSeconds === 'number' && Number.isFinite(payload.workingTimeSeconds)
+        ? payload.workingTimeSeconds
+        : 27000;
 
     worksheet.getCell('B2').value =
       primaryStageItem?.article || primaryStageItem?.code || primaryRow.no;
     worksheet.getCell('B3').value = '';
     worksheet.getCell('B4').value = '';
-    worksheet.getCell('B5').value = pairsPerPerson8h;
+    worksheet.getCell('B5').value = estimateOutputPairs;
     worksheet.getCell('G3').value = `${mappedRows.length} Pairs`;
-    worksheet.getCell('G4').value = '8 hours';
-    worksheet.getCell('G5').value = '1800 sec';
+    worksheet.getCell('G4').value = `${workingTimeSeconds} sec`;
+    worksheet.getCell('G5').value = `${taktTimeSeconds} sec`;
 
     const summaryRowByStage: Record<string, number> = {
       CUTTING: 2,
@@ -502,14 +531,14 @@ export class TableCtService implements OnModuleInit {
     const summaryRow = summaryRowByStage[normalizedStage] ?? 6;
 
     worksheet.getCell(`P${summaryRow}`).value = stageTotalSeconds;
-    worksheet.getCell(`Q${summaryRow}`).value = pairsPerPerson8h;
-    worksheet.getCell(`R${summaryRow}`).value = 0;
-    worksheet.getCell(`S${summaryRow}`).value = 0;
+    worksheet.getCell(`Q${summaryRow}`).value = manpowerStandardLabor;
+    worksheet.getCell(`R${summaryRow}`).value = capacityPerHour;
+    worksheet.getCell(`S${summaryRow}`).value = estimateOutputPairs;
     worksheet.getCell(`T${summaryRow}`).value = '0%';
     worksheet.getCell('P6').value = stageTotalSeconds;
-    worksheet.getCell('Q6').value = pairsPerPerson8h;
-    worksheet.getCell('R6').value = 0;
-    worksheet.getCell('S6').value = 0;
+    worksheet.getCell('Q6').value = manpowerStandardLabor;
+    worksheet.getCell('R6').value = capacityPerHour;
+    worksheet.getCell('S6').value = estimateOutputPairs;
     worksheet.getCell('T6').value = '0%';
 
     populateLsaDetailSection(worksheet, mappedRows, category);
