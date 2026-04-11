@@ -19,7 +19,7 @@ import { TopBar } from '@/components/dashboard/top-bar';
 import { UploadVideoModal } from '@/components/dashboard/upload-video-modal';
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
 import { fetchStageCategories } from '@/services/stage-categories';
-import { createStages, deleteStage, reorderStages } from '@/services/stages';
+import { createStages, deleteStage, fetchStages, reorderStages } from '@/services/stages';
 import { reorderTableCtRows } from '@/services/table-ct';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
   import {
@@ -102,6 +102,7 @@ export function DashboardPage({
   const [isDeleteLogsOpen, setIsDeleteLogsOpen] = useState(false);
   const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
   const [activeLinkedItemId, setActiveLinkedItemId] = useState<string | null>(null);
+  const [hideCompletedStageItems, setHideCompletedStageItems] = useState(false);
   const [deletedHistoryItem, setDeletedHistoryItem] = useState<HistoryItem | null>(null);
   const [playbackState, setPlaybackState] = useState<PreviewPlaybackState>({
     currentTime: 0,
@@ -164,8 +165,13 @@ export function DashboardPage({
   }, [dispatch, stageFilters]);
 
   const filteredItems = useMemo(
-    () => orderedStageItems.filter((item) => item.stage === activeStage),
-    [activeStage, orderedStageItems]
+    () =>
+      orderedStageItems.filter(
+        (item) =>
+          item.stage === activeStage &&
+          (!hideCompletedStageItems || !item.completed),
+      ),
+    [activeStage, hideCompletedStageItems, orderedStageItems]
   );
 
   const selectedItem =
@@ -208,6 +214,45 @@ export function DashboardPage({
 
     void dispatch(loadHistoryItems(selectedItem.code));
   }, [dispatch, selectedItem?.code]);
+
+  useEffect(() => {
+    if (!hideCompletedStageItems || !activeLinkedItemId) {
+      return;
+    }
+
+    const activeLinkedItem = orderedStageItems.find((item) => item.id === activeLinkedItemId);
+    if (!activeLinkedItem?.completed) {
+      return;
+    }
+
+    setActiveLinkedItemId(null);
+    dispatch(setSelectedItemId(''));
+    dispatch(setHistoryItems([]));
+    dispatch(setSelectedCtCell(null));
+  }, [activeLinkedItemId, dispatch, hideCompletedStageItems, orderedStageItems]);
+
+  const handleRefreshTable = async () => {
+    if (selectedItem) {
+      await dispatch(
+        loadTableRows({
+          stage: selectedItem.stage,
+          stageCode: selectedItem.code,
+          stageItemId: selectedItem.id,
+        }),
+      );
+
+      await dispatch(loadHistoryItems(selectedItem.code));
+      return;
+    }
+
+    await dispatch(
+      loadTableRows({
+        stage: activeStage,
+      }),
+    );
+
+    dispatch(setHistoryItems([]));
+  };
 
   const handleStageReorder = (activeId: string, overId: string) => {
     const stageScoped = orderedStageItems.filter((item) => item.stage === activeStage);
@@ -275,14 +320,18 @@ export function DashboardPage({
   };
 
   const handleUpload = async (payload: {
+    date: string;
     stageCode: string;
     area: StageKey;
     article: string;
     files: File[];
+    onProgress?: (percent: number) => void;
+    signal?: AbortSignal;
   }) => {
-    const nextItems = await createStages(payload);
+    await createStages(payload);
+    const refreshedItems = await fetchStages(stageFilters);
 
-    dispatch(appendStageItems(nextItems));
+    dispatch(setStageItems(refreshedItems));
     dispatch(setActiveStage(payload.area));
     setIsUploadOpen(false);
   };
@@ -311,8 +360,8 @@ export function DashboardPage({
     dispatch(setStageItemsError(''));
   };
 
-  const handleDuplicate = (item: StageItem, targetArea: StageKey) => {
-    dispatch(appendStageItems([item]));
+  const handleDuplicate = (items: StageItem[], targetArea: StageKey) => {
+    dispatch(appendStageItems(items));
     dispatch(setActiveStage(targetArea));
     setIsDuplicateOpen(false);
   };
@@ -382,6 +431,8 @@ export function DashboardPage({
           onDeleteItem={handleDeleteStage}
           onOpenUpload={() => setIsUploadOpen(true)}
           onOpenDuplicate={() => setIsDuplicateOpen(true)}
+          onToggleHideCompleted={() => setHideCompletedStageItems((value) => !value)}
+          hideCompleted={hideCompletedStageItems}
           errorMessage={stageItemsError}
         />
       }
@@ -395,6 +446,10 @@ export function DashboardPage({
             deletedHistoryItem={deletedHistoryItem}
           />
           <HistoryPanel
+            onSelectItem={(item) => {
+              issuePlaybackRequest({ type: 'pause' });
+              issuePlaybackRequest({ type: 'seek', time: item.startTime });
+            }}
             onDeleteApplied={(item) => {
               setDeletedHistoryItem(item);
             }}
@@ -412,6 +467,7 @@ export function DashboardPage({
             rows={visibleTableRows}
             activeStageItemId={activeLinkedItemId}
             onReorder={handleTableReorder}
+            onRefresh={handleRefreshTable}
             onToggleStageItemActive={(stageItemId) => {
               setActiveLinkedItemId(stageItemId);
               if (!stageItemId) {
@@ -439,8 +495,8 @@ export function DashboardPage({
             onReset={() =>
               setStageFilters({
                 keyword: '',
-                dateFrom: '',
-                dateTo: '',
+                dateFrom: getTodayFilterDate(),
+                dateTo: getTodayFilterDate(),
                 stage: '',
                 area: '',
                 article: '',
@@ -451,7 +507,6 @@ export function DashboardPage({
             open={isDuplicateOpen}
             categories={stageCategories}
             defaultArea={activeStage}
-            items={orderedStageItems}
             onClose={() => setIsDuplicateOpen(false)}
             onDuplicate={handleDuplicate}
           />
@@ -488,10 +543,12 @@ export function DashboardPage({
 }
 
 function getFiltersFromSearchParams(searchParams: URLSearchParams): StageFilters {
+  const today = getTodayFilterDate();
+
   return {
     keyword: searchParams.get('keyword') ?? '',
-    dateFrom: searchParams.get('dateFrom') ?? '',
-    dateTo: searchParams.get('dateTo') ?? '',
+    dateFrom: searchParams.get('dateFrom') ?? today,
+    dateTo: searchParams.get('dateTo') ?? today,
     stage: searchParams.get('stage') ?? '',
     area: searchParams.get('area') ?? '',
     article: searchParams.get('article') ?? '',
@@ -521,4 +578,12 @@ function areStageFiltersEqual(left: StageFilters, right: StageFilters) {
     left.area === right.area &&
     left.article === right.article
   );
+}
+
+function getTodayFilterDate() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

@@ -7,9 +7,10 @@ import type { HistoryItem } from '@/types/dashboard';
 
 type HistoryPanelProps = {
   onDeleteApplied?: (item: HistoryItem) => void;
+  onSelectItem?: (item: HistoryItem) => void;
 };
 
-export function HistoryPanel({ onDeleteApplied }: HistoryPanelProps) {
+export function HistoryPanel({ onDeleteApplied, onSelectItem }: HistoryPanelProps) {
   const dispatch = useAppDispatch();
   const { historyItems, historyError } = useAppSelector((state) => ({
     historyItems: state.dashboard.historyItems,
@@ -51,7 +52,8 @@ export function HistoryPanel({ onDeleteApplied }: HistoryPanelProps) {
             return (
               <div
                 key={entry.id}
-                className="group flex items-center gap-2 rounded-xl bg-gray-50 px-2.5 py-2 transition-all hover:bg-gray-100"
+                onClick={() => onSelectItem?.(entry)}
+                className="group flex cursor-pointer items-center gap-2 rounded-xl bg-gray-50 px-2.5 py-2 transition-all hover:bg-gray-100"
               >
                 <div className={cn('h-1.5 w-1.5 shrink-0 rounded-full', tone.dot)} />
 
@@ -71,7 +73,8 @@ export function HistoryPanel({ onDeleteApplied }: HistoryPanelProps) {
                 <button
                   type="button"
                   disabled={entry.committed || entry.locked}
-                  onClick={async () => {
+                  onClick={async (event) => {
+                    event.stopPropagation();
                     if (entry.committed || entry.locked) {
                       return;
                     }

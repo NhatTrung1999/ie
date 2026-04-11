@@ -38,6 +38,8 @@ export class HistoryService implements OnModuleInit {
     return {
       items: rows.map((row) => ({
         id: row.id,
+        startTime: row.startTime,
+        endTime: row.endTime,
         range: `${formatTime(row.startTime)} - ${formatTime(row.endTime)}`,
         label: `${row.type}: ${row.value.toFixed(2)}`,
         committed: row.committed,
@@ -73,6 +75,8 @@ export class HistoryService implements OnModuleInit {
     return {
       item: {
         id: created.id,
+        startTime: created.startTime,
+        endTime: created.endTime,
         range: `${formatTime(created.startTime)} - ${formatTime(created.endTime)}`,
         label: `${created.type}: ${created.value.toFixed(2)}`,
         committed: created.committed,
@@ -116,6 +120,8 @@ export class HistoryService implements OnModuleInit {
     return {
       items: rows.map((row) => ({
         id: row.id,
+        startTime: row.startTime,
+        endTime: row.endTime,
         range: `${formatTime(row.startTime)} - ${formatTime(row.endTime)}`,
         label: `${row.type}: ${row.value.toFixed(2)}`,
         committed: row.committed,

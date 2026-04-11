@@ -14,6 +14,8 @@ export type StageItem = {
   duration: string;
   mood: string;
   stage: StageKey;
+  stageDate?: string | null;
+  completed?: boolean;
   videoUrl?: string;
 };
 
@@ -28,6 +30,8 @@ export type StageFilters = {
 
 export type HistoryItem = {
   id: string;
+  startTime: number;
+  endTime: number;
   range: string;
   label: string;
   committed: boolean;

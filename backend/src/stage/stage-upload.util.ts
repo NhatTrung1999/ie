@@ -1,7 +1,9 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync } from 'node:fs';
+import { unlink } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 
-import { diskStorage } from 'multer';
+import type { Request } from 'express';
+import type { StorageEngine } from 'multer';
 
 function sanitizeFileName(fileName: string) {
   return fileName
@@ -18,14 +20,87 @@ export function ensureStageUploadDir() {
   }
 }
 
-export const stageUploadStorage = diskStorage({
-  destination: (_req, _file, cb) => {
+function createUploadFileName(originalName: string) {
+  const safeName = sanitizeFileName(originalName.replace(extname(originalName), ''));
+  const suffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  return `${safeName || 'video'}-${suffix}${extname(originalName)}`;
+}
+
+export const stageUploadStorage: StorageEngine = {
+  _handleFile(req: Request, file, cb) {
     ensureStageUploadDir();
-    cb(null, stageUploadDir);
+
+    const fileName = createUploadFileName(file.originalname);
+    const filePath = join(stageUploadDir, fileName);
+    const outStream = createWriteStream(filePath);
+    let settled = false;
+    let cleanedUp = false;
+    let completed = false;
+
+    const cleanupFile = async () => {
+      if (cleanedUp) {
+        return;
+      }
+
+      cleanedUp = true;
+
+      try {
+        await unlink(filePath);
+      } catch {
+        // Ignore cleanup failures for partially written files.
+      }
+    };
+
+    const abortUpload = (error: Error) => {
+      if (completed || settled) {
+        return;
+      }
+
+      settled = true;
+      outStream.destroy(error);
+      void cleanupFile();
+      cb(error);
+    };
+
+    req.once('aborted', () => {
+      abortUpload(new Error('Upload aborted by client.'));
+    });
+
+    file.stream.once('error', (error) => {
+      abortUpload(error);
+    });
+
+    outStream.once('error', (error) => {
+      abortUpload(error);
+    });
+
+    outStream.once('finish', () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      completed = true;
+      cb(null, {
+        destination: stageUploadDir,
+        filename: fileName,
+        path: filePath,
+        size: outStream.bytesWritten,
+      });
+    });
+
+    file.stream.pipe(outStream);
   },
-  filename: (_req, file, cb) => {
-    const safeName = sanitizeFileName(file.originalname.replace(extname(file.originalname), ''));
-    const suffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${safeName || 'video'}-${suffix}${extname(file.originalname)}`);
+  _removeFile(_req, file, cb) {
+    const filePath = typeof file.path === 'string' ? file.path : '';
+
+    if (!filePath) {
+      cb(null);
+      return;
+    }
+
+    unlink(filePath)
+      .then(() => cb(null))
+      .catch(() => cb(null));
   },
-});
+};

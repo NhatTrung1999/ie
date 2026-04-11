@@ -15,6 +15,7 @@ export const stageItems: StageItem[] = [
     duration: '03:44',
     mood: 'NVA',
     stage: 'CUTTING',
+    completed: false,
   },
   {
     id: 'c4',
@@ -23,6 +24,7 @@ export const stageItems: StageItem[] = [
     duration: '05:34',
     mood: 'VA',
     stage: 'CUTTING',
+    completed: false,
   },
   {
     id: 'c3',
@@ -31,6 +33,7 @@ export const stageItems: StageItem[] = [
     duration: '03:12',
     mood: 'NVA',
     stage: 'CUTTING',
+    completed: false,
   },
   {
     id: 'c2',
@@ -39,6 +42,7 @@ export const stageItems: StageItem[] = [
     duration: '04:59',
     mood: 'NVA',
     stage: 'CUTTING',
+    completed: false,
   },
   {
     id: 's1',
@@ -47,6 +51,7 @@ export const stageItems: StageItem[] = [
     duration: '02:40',
     mood: 'VA',
     stage: 'STITCHING',
+    completed: false,
   },
   {
     id: 'a1',
@@ -55,6 +60,7 @@ export const stageItems: StageItem[] = [
     duration: '01:45',
     mood: 'VA',
     stage: 'ASSEMBLY',
+    completed: false,
   },
   {
     id: 'st1',
@@ -63,18 +69,19 @@ export const stageItems: StageItem[] = [
     duration: '00:30',
     mood: 'NVA',
     stage: 'STOCK',
+    completed: false,
   },
 ];
 
 export const historyItems: HistoryItem[] = [
-  { id: 'h1', range: '00:09 - 00:13', label: 'SKIP: 3.44', committed: false },
-  { id: 'h2', range: '00:04 - 00:09', label: 'VA: 5.34', committed: false },
-  { id: 'h3', range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
-  { id: 'h3', range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
-  { id: 'h3', range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
-  { id: 'h3', range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
-  { id: 'h3', range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
-  { id: 'h3', range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
+  { id: 'h1', startTime: 9, endTime: 13, range: '00:09 - 00:13', label: 'SKIP: 3.44', committed: false },
+  { id: 'h2', startTime: 4, endTime: 9, range: '00:04 - 00:09', label: 'VA: 5.34', committed: false },
+  { id: 'h3', startTime: 0, endTime: 4, range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
+  { id: 'h4', startTime: 0, endTime: 4, range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
+  { id: 'h5', startTime: 0, endTime: 4, range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
+  { id: 'h6', startTime: 0, endTime: 4, range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
+  { id: 'h7', startTime: 0, endTime: 4, range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
+  { id: 'h8', startTime: 0, endTime: 4, range: '00:00 - 00:04', label: 'NVA: 4.59', committed: false },
 ];
 
 export const ctRows: CtRow[] = [

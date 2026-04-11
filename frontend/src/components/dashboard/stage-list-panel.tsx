@@ -2,9 +2,9 @@ import { useRef, useState } from 'react';
 import {
   Copy,
   FileVideo,
+  Filter,
   GripVertical,
   Plus,
-  RefreshCw,
   Trash2,
 } from 'lucide-react';
 
@@ -23,6 +23,8 @@ type StageListPanelProps = {
   onDeleteItem: (id: string) => void;
   onOpenUpload: () => void;
   onOpenDuplicate: () => void;
+  onToggleHideCompleted: () => void;
+  hideCompleted: boolean;
 };
 
 export function StageListPanel({
@@ -37,6 +39,8 @@ export function StageListPanel({
   onDeleteItem,
   onOpenUpload,
   onOpenDuplicate,
+  onToggleHideCompleted,
+  hideCompleted,
 }: StageListPanelProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -93,22 +97,31 @@ export function StageListPanel({
           </div>
 
           <div className="flex items-center gap-1">
-            <button className="group rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600">
-              <RefreshCw className="h-3.5 w-3.5 transition-transform duration-500 group-hover:rotate-180" />
+            <button
+              onClick={onToggleHideCompleted}
+              title={hideCompleted ? 'Show completed items' : 'Hide completed items'}
+              className={cn(
+                'rounded-lg p-1.5 transition',
+                hideCompleted
+                  ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700',
+              )}
+            >
+              <Filter className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={onOpenDuplicate}
-              className="flex items-center gap-1 rounded-lg bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-600 transition hover:bg-violet-100"
+              title="Duplicate"
+              className="rounded-lg bg-violet-50 p-1.5 text-violet-600 transition hover:bg-violet-100"
             >
-              <Copy className="h-3 w-3" />
-              Duplicate
+              <Copy className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={onOpenUpload}
-              className="flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-600 transition hover:bg-blue-100"
+              title="Add"
+              className="rounded-lg bg-blue-50 p-1.5 text-blue-600 transition hover:bg-blue-100"
             >
-              <Plus className="h-3 w-3" />
-              Add
+              <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -238,7 +251,9 @@ export function StageListPanel({
                   >
                     {item.code}. {item.name}
                   </p>
-                  <p className="text-[9px] text-gray-400">Stage {index + 1}</p>
+                  <p className="text-[9px] text-gray-400">
+                    {item.completed ? 'Completed' : `Stage ${index + 1}`}
+                  </p>
                 </div>
 
                 <button

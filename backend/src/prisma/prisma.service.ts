@@ -13,7 +13,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     }
 
     super({
-      adapter: new PrismaMssql(parseSqlServerConnectionString(connectionString)),
+      adapter: new PrismaMssql(
+        parseSqlServerConnectionString(connectionString),
+      ),
     });
   }
 
@@ -22,9 +24,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   }
 
   async enableShutdownHooks(app: INestApplication) {
-    (this as PrismaClient & {
-      $on(event: 'beforeExit', callback: () => Promise<void>): void;
-    }).$on('beforeExit', async () => {
+    (
+      this as PrismaClient & {
+        $on(event: 'beforeExit', callback: () => Promise<void>): void;
+      }
+    ).$on('beforeExit', async () => {
       await app.close();
     });
   }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Check,
   CheckCheck,
   FileSpreadsheet,
   GripVertical,
@@ -18,8 +19,8 @@ import {
 } from '@/services/table-ct';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
+  confirmSelectedTableRows,
   completeTableRow,
-  loadTableRows,
   saveTableRow,
   setSelectedCtCell,
   toggleTableRowConfirm,
@@ -44,6 +45,7 @@ type CtTablePanelProps = {
   rows: CtRow[];
   activeStageItemId: string | null;
   onReorder: (activeNo: string, overNo: string) => void;
+  onRefresh: () => Promise<void> | void;
   onToggleStageItemActive: (stageItemId: string | null) => void;
 };
 
@@ -51,6 +53,7 @@ export function CtTablePanel({
   rows,
   activeStageItemId,
   onReorder,
+  onRefresh,
   onToggleStageItemActive,
 }: CtTablePanelProps) {
   const dispatch = useAppDispatch();
@@ -101,11 +104,7 @@ export function CtTablePanel({
   };
 
   const handleRefresh = () => {
-    void dispatch(
-      loadTableRows({
-        stage: activeStage,
-      }),
-    );
+    void onRefresh();
   };
 
   const handleMachineType = async (id: string, value: string) => {
@@ -209,6 +208,24 @@ export function CtTablePanel({
     taktTimeSeconds > 0 ? Math.ceil(totalCtSeconds / taktTimeSeconds) : 0;
   const capacityPerHour =
     totalCtSeconds > 0 ? Math.round(3600 / totalCtSeconds) : 0;
+  const unconfirmedRowIds = rows.filter((row) => !row.confirmed).map((row) => row.id);
+
+  const handleConfirmMany = async () => {
+    if (unconfirmedRowIds.length === 0) {
+      return;
+    }
+
+    const result = await dispatch(
+      confirmSelectedTableRows({
+        ids: unconfirmedRowIds,
+        confirmed: true,
+      }),
+    );
+
+    if (confirmSelectedTableRows.rejected.match(result)) {
+      handleRefresh();
+    }
+  };
 
   const handleExportLsa = () => {
     if (rows.length === 0) {
@@ -294,6 +311,8 @@ export function CtTablePanel({
           </Button>
           <Button
             size="sm"
+            onClick={() => void handleConfirmMany()}
+            disabled={unconfirmedRowIds.length === 0}
             className="h-8 rounded-lg border border-blue-200 bg-blue-50 px-3 text-[11px] text-blue-600 shadow-none hover:bg-blue-100"
           >
             <CheckCheck className="h-3 w-3" />
@@ -497,6 +516,7 @@ export function CtTablePanel({
                     <span className="text-xs font-mono text-gray-400">
                       {formatAverage(
                         type === 'NVA' ? row.nvaValues : row.vaValues,
+                        row.done,
                         sessionCategory,
                       )}
                     </span>
@@ -564,15 +584,18 @@ export function CtTablePanel({
                             e.stopPropagation();
                             void handleDone(row.id);
                           }}
+                          disabled={row.confirmed}
                           title={row.done ? 'Mark as not done' : 'Mark row as done'}
                           className={cn(
-                            'h-6 rounded-lg border px-2.5 text-[10px] font-bold shadow-none',
-                            row.done
+                            'h-6 rounded-lg border px-2 text-[10px] font-bold shadow-none',
+                            row.confirmed
+                              ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-300'
+                              : row.done
                               ? 'border-emerald-500 bg-emerald-500 text-white hover:bg-emerald-600'
                               : 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100',
                           )}
                         >
-                          Done
+                          <Check className="h-3 w-3" />
                         </Button>
                         <Button
                           size="sm"
@@ -714,8 +737,14 @@ function formatMetricValue(value: number) {
   return value.toFixed(2);
 }
 
-function formatAverage(values: number[], category?: string) {
-  return calculateAverageNumber(values, category).toFixed(2);
+function formatAverage(values: number[], isDone: boolean, category?: string) {
+  const normalizedCategory = category?.trim().toUpperCase() ?? '';
+
+  if (!isDone && normalizedCategory !== 'COSTING') {
+    return '';
+  }
+
+  return calculateAverageNumber(values, normalizedCategory).toFixed(2);
 }
 
 function calculateAverageNumber(values: number[], category?: string) {

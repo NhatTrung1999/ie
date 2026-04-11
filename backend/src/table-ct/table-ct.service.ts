@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { JwtUserPayload } from '../auth/auth.types';
 import { DeleteLogService } from '../delete-log/delete-log.service';
 import { StageCategoryService } from '../stage-category/stage-category.service';
+import type { ConfirmTableCtRowsDto } from './dto/confirm-table-ct-rows.dto';
 import type { ExportTableCtDto } from './dto/export-table-ct.dto';
 import type { UpdateTableCtMetricsDto } from './dto/update-table-ct-metrics.dto';
 import type { ReorderTableCtDto } from './dto/reorder-table-ct.dto';
@@ -138,6 +139,55 @@ export class TableCtService implements OnModuleInit {
 
     return {
       row: this.mapRow(updatedRow),
+    };
+  }
+
+  async confirmRows(payload: ConfirmTableCtRowsDto) {
+    await this.ensureTable();
+
+    const ids = payload.ids?.map((id) => id.trim()).filter(Boolean) ?? [];
+    const confirmed = payload.confirmed ?? true;
+
+    if (ids.length === 0) {
+      throw new BadRequestException('Table row ids are required.');
+    }
+
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException('Table row ids must be unique.');
+    }
+
+    const existingRows = await this.prismaService.tableCT.findMany({
+      where: {
+        id: { in: ids },
+      },
+    });
+
+    if (existingRows.length !== ids.length) {
+      throw new NotFoundException('One or more table rows were not found.');
+    }
+
+    await this.prismaService.$transaction(
+      ids.map((id) =>
+        this.prismaService.tableCT.update({
+          where: { id },
+          data: { confirmed },
+        }),
+      ),
+    );
+
+    const updatedRows = await this.prismaService.tableCT.findMany({
+      where: {
+        id: { in: ids },
+      },
+    });
+
+    const rowMap = new Map(updatedRows.map((row) => [row.id, row]));
+
+    return {
+      rows: ids
+        .map((id) => rowMap.get(id))
+        .filter((row): row is NonNullable<typeof row> => Boolean(row))
+        .map((row) => this.mapRow(row)),
     };
   }
 

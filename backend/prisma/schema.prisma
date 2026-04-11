@@ -26,6 +26,7 @@ model StageList {
   mood      String   @db.NVarChar(20)
   stage     String   @db.NVarChar(50)
   filePath  String?  @db.NVarChar(500)
+  stageDate DateTime? @db.Date
   sortOrder Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

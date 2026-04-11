@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
-import { unlink } from 'node:fs/promises';
-import { basename, extname } from 'node:path';
+import { copyFile, unlink } from 'node:fs/promises';
+import { basename, extname, join } from 'node:path';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -58,21 +58,63 @@ export class StageService implements OnModuleInit {
       where.article = { contains: normalizedArticle };
     }
 
-    if (dateFrom || dateTo) {
-      where.createdAt = {
-        ...(dateFrom ? { gte: dateFrom } : {}),
-        ...(dateTo ? { lte: dateTo } : {}),
-      };
-    }
-
     const stages = await this.prismaService.stageList.findMany({
       where,
       orderBy: [{ stage: 'asc' }, { sortOrder: 'asc' }, { id: 'asc' }],
     });
+    const filteredStages = stages.filter((item) => {
+      const effectiveDate = item.stageDate ?? item.createdAt;
+
+      if (dateFrom && effectiveDate < dateFrom) {
+        return false;
+      }
+
+      if (dateTo && effectiveDate > dateTo) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const stageIds = filteredStages.map((item) => item.id);
+    const tableRows =
+      stageIds.length > 0
+        ? await this.prismaService.tableCT.findMany({
+            where: {
+              OR: [
+                { stageItemId: { in: stageIds } },
+                {
+                  stageItemId: null,
+                  no: { in: filteredStages.map((item) => item.code.trim().toUpperCase()) },
+                  stage: { in: filteredStages.map((item) => item.stage) },
+                },
+              ],
+            },
+            select: {
+              stageItemId: true,
+              no: true,
+              stage: true,
+              done: true,
+            },
+          })
+        : [];
+    const completionMap = new Map<string, boolean>();
+
+    tableRows.forEach((row) => {
+      const identityKey = row.stageItemId
+        ? row.stageItemId
+        : `${row.stage.trim().toUpperCase()}::${row.no.trim().toUpperCase()}`;
+
+      if (!completionMap.has(identityKey) || row.done) {
+        completionMap.set(identityKey, row.done);
+      }
+    });
 
     return {
-      stages: stages.map((item) => {
+      stages: filteredStages.map((item) => {
         const parsedIdentity = parseStageIdentity(item.name, item.code);
+        const completionKey = item.id;
+        const fallbackCompletionKey = `${item.stage.trim().toUpperCase()}::${parsedIdentity.code}`;
 
         return {
           id: item.id,
@@ -82,6 +124,11 @@ export class StageService implements OnModuleInit {
           duration: item.duration,
           mood: item.mood,
           stage: item.stage,
+          stageDate: item.stageDate?.toISOString().slice(0, 10) ?? null,
+          completed:
+            completionMap.get(completionKey) ??
+            completionMap.get(fallbackCompletionKey) ??
+            false,
           videoUrl: item.filePath ? `/uploads/stages/${basename(item.filePath)}` : undefined,
         };
       }),
@@ -95,6 +142,7 @@ export class StageService implements OnModuleInit {
       payload.area,
       'Area',
     );
+    const selectedStageDate = parseStageDate(payload.date);
     const baseCode = payload.stageCode?.trim().toUpperCase() || 'NEW';
     const uploadedFiles = files.filter(Boolean);
 
@@ -102,35 +150,52 @@ export class StageService implements OnModuleInit {
       throw new BadRequestException('At least one video file is required.');
     }
 
-    const stageCount = await this.prismaService.stageList.count({
-      where: { stage: normalizedArea },
-    });
-    const createdStages = await this.prismaService.$transaction(async (tx) => {
-      const created: Prisma.StageListGetPayload<Record<string, never>>[] = [];
+    let createdStages: Prisma.StageListGetPayload<Record<string, never>>[] = [];
 
-      for (const [index, file] of uploadedFiles.entries()) {
-        const parsedIdentity = parseStageIdentity(
-          file.originalname,
-          uploadedFiles.length === 1 ? baseCode : `${baseCode}-${index + 1}`,
-        );
-        const stage = await tx.stageList.create({
-          data: {
-            code: parsedIdentity.code,
-            name: parsedIdentity.name,
-            article: payload.article?.trim() || null,
-            duration: '00:00',
-            mood: 'NVA',
-            stage: normalizedArea,
-            filePath: file.path,
-            sortOrder: stageCount + index + 1,
-          },
-        });
+    try {
+      const stageCount = await this.prismaService.stageList.count({
+        where: { stage: normalizedArea },
+      });
+      createdStages = await this.prismaService.$transaction(async (tx) => {
+        const created: Prisma.StageListGetPayload<Record<string, never>>[] = [];
 
-        created.push(stage);
-      }
+        for (const [index, file] of uploadedFiles.entries()) {
+          const parsedIdentity = parseStageIdentity(
+            file.originalname,
+            uploadedFiles.length === 1 ? baseCode : `${baseCode}-${index + 1}`,
+          );
+          const stage = await tx.stageList.create({
+            data: {
+              code: parsedIdentity.code,
+              name: parsedIdentity.name,
+              article: payload.article?.trim() || null,
+              duration: '00:00',
+              mood: 'NVA',
+              stage: normalizedArea,
+              filePath: file.path,
+              stageDate: selectedStageDate,
+              sortOrder: stageCount + index + 1,
+            },
+          });
 
-      return created;
-    });
+          created.push(stage);
+        }
+
+        return created;
+      });
+    } catch (error) {
+      await Promise.all(
+        uploadedFiles.map((file) =>
+          file?.path
+            ? unlink(file.path).catch(() => {
+                // Ignore cleanup failures for orphaned uploads.
+              })
+            : Promise.resolve(),
+        ),
+      );
+
+      throw error;
+    }
 
     return {
       stages: createdStages.map((item) => {
@@ -144,6 +209,8 @@ export class StageService implements OnModuleInit {
           duration: item.duration,
           mood: item.mood,
           stage: item.stage,
+          stageDate: item.stageDate?.toISOString().slice(0, 10) ?? null,
+          completed: false,
           videoUrl: item.filePath ? `/uploads/stages/${basename(item.filePath)}` : undefined,
         };
       }),
@@ -184,9 +251,12 @@ export class StageService implements OnModuleInit {
 
     const duplicateCode = `${sourceStage.code}-COPY${relatedCopies + 1}`;
     const duplicateName = `${sourceStage.name} Copy`;
+    const duplicatedFilePath = sourceStage.filePath
+      ? await cloneStageVideoFile(sourceStage.filePath, duplicateCode)
+      : null;
 
     const duplicatedStage = await this.prismaService.$transaction(async (tx) => {
-      return tx.stageList.create({
+      const createdStage = await tx.stageList.create({
         data: {
           code: duplicateCode,
           name: duplicateName,
@@ -194,10 +264,90 @@ export class StageService implements OnModuleInit {
           duration: sourceStage.duration,
           mood: sourceStage.mood,
           stage: targetArea,
-          filePath: sourceStage.filePath,
+          filePath: duplicatedFilePath,
+          stageDate: sourceStage.stageDate ?? new Date(),
           sortOrder: targetCount + 1,
         },
       });
+
+      const sourceTableRows = await tx.tableCT.findMany({
+        where: {
+          OR: [
+            { stageItemId: sourceStage.id },
+            {
+              stageItemId: null,
+              no: sourceStage.code,
+              stage: sourceStage.stage,
+            },
+          ],
+        },
+        orderBy: [{ sortOrder: 'asc' }, { no: 'asc' }],
+      });
+
+      if (sourceTableRows.length > 0) {
+        await Promise.all(
+          sourceTableRows.map((row, index) =>
+            tx.tableCT.create({
+              data: {
+                stageItemId: createdStage.id,
+                no: duplicateCode,
+                partName: duplicateName,
+                stage: targetArea,
+                ct1: row.ct1,
+                ct2: row.ct2,
+                ct3: row.ct3,
+                ct4: row.ct4,
+                ct5: row.ct5,
+                ct6: row.ct6,
+                ct7: row.ct7,
+                ct8: row.ct8,
+                ct9: row.ct9,
+                ct10: row.ct10,
+                vaCt1: row.vaCt1,
+                vaCt2: row.vaCt2,
+                vaCt3: row.vaCt3,
+                vaCt4: row.vaCt4,
+                vaCt5: row.vaCt5,
+                vaCt6: row.vaCt6,
+                vaCt7: row.vaCt7,
+                vaCt8: row.vaCt8,
+                vaCt9: row.vaCt9,
+                vaCt10: row.vaCt10,
+                machineType: row.machineType,
+                confirmed: false,
+                done: false,
+                sortOrder: index + 1,
+              },
+            }),
+          ),
+        );
+      }
+
+      const sourceHistoryEntries = await tx.historyEntry.findMany({
+        where: {
+          stageCode: sourceStage.code,
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      });
+
+      if (sourceHistoryEntries.length > 0) {
+        await Promise.all(
+          sourceHistoryEntries.map((entry) =>
+            tx.historyEntry.create({
+              data: {
+                stageCode: duplicateCode,
+                startTime: entry.startTime,
+                endTime: entry.endTime,
+                type: entry.type,
+                value: entry.value,
+                committed: entry.committed,
+              },
+            }),
+          ),
+        );
+      }
+
+      return createdStage;
     });
 
     const parsedIdentity = parseStageIdentity(duplicatedStage.name, duplicatedStage.code);
@@ -211,6 +361,8 @@ export class StageService implements OnModuleInit {
         duration: duplicatedStage.duration,
         mood: duplicatedStage.mood,
         stage: duplicatedStage.stage,
+        stageDate: duplicatedStage.stageDate?.toISOString().slice(0, 10) ?? null,
+        completed: false,
         videoUrl: duplicatedStage.filePath
           ? `/uploads/stages/${basename(duplicatedStage.filePath)}`
           : undefined,
@@ -419,6 +571,12 @@ export class StageService implements OnModuleInit {
         ADD [filePath] NVARCHAR(500) NULL;
       END
 
+      IF COL_LENGTH('dbo.StageList', 'stageDate') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[StageList]
+        ADD [stageDate] DATE NULL;
+      END
+
       IF COL_LENGTH('dbo.StageList', 'createdAt') IS NULL
       BEGIN
         ALTER TABLE [dbo].[StageList]
@@ -522,4 +680,38 @@ function parseDateFilter(value: string | undefined, label: string) {
   }
 
   return parsed;
+}
+
+function parseStageDate(value?: string) {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw new BadRequestException('Upload date is invalid.');
+  }
+
+  return parsed;
+}
+
+async function cloneStageVideoFile(sourcePath: string, duplicateCode: string) {
+  ensureStageUploadDir();
+
+  const extension = extname(sourcePath);
+  const safeBaseName = duplicateCode
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9._-]/g, '')
+    .toLowerCase();
+  const suffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  const targetPath = join(
+    process.cwd(),
+    'uploads',
+    'stages',
+    `${safeBaseName || 'video'}-${suffix}${extension}`,
+  );
+
+  await copyFile(sourcePath, targetPath);
+  return targetPath;
 }

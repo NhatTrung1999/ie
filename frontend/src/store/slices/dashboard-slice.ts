@@ -3,6 +3,7 @@ import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/tool
 import { commitHistory, createHistory, deleteHistory, fetchHistory } from '@/services/history';
 import { fetchStages } from '@/services/stages';
 import {
+  confirmTableCtRows,
   fetchTableCt,
   markTableCtDone,
   updateTableCtMetrics,
@@ -105,6 +106,25 @@ export const completeTableRow = createAsyncThunk(
     } catch (error) {
       return rejectWithValue(
         error instanceof Error ? error.message : 'Unable to mark table row as done.',
+      );
+    }
+  },
+);
+
+export const confirmSelectedTableRows = createAsyncThunk(
+  'dashboard/confirmSelectedTableRows',
+  async (
+    payload: {
+      ids: string[];
+      confirmed?: boolean;
+    },
+    { rejectWithValue },
+  ) => {
+    try {
+      return await confirmTableCtRows(payload);
+    } catch (error) {
+      return rejectWithValue(
+        error instanceof Error ? error.message : 'Unable to confirm table rows.',
       );
     }
   },
@@ -353,6 +373,17 @@ const dashboardSlice = createSlice({
           typeof action.payload === 'string'
             ? action.payload
             : 'Unable to mark table row as done.';
+      })
+      .addCase(confirmSelectedTableRows.fulfilled, (state, action) => {
+        const updatedRows = new Map(action.payload.map((row) => [row.id, row]));
+        state.tableRows = state.tableRows.map((row) => updatedRows.get(row.id) ?? row);
+        state.tableRowsError = '';
+      })
+      .addCase(confirmSelectedTableRows.rejected, (state, action) => {
+        state.tableRowsError =
+          typeof action.payload === 'string'
+            ? action.payload
+            : 'Unable to confirm table rows.';
       })
       .addCase(saveTableRowMetrics.fulfilled, (state, action) => {
         state.tableRows = state.tableRows.map((row) =>

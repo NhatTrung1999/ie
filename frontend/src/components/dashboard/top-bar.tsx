@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Bell,
   ChevronRight,
   LogOut,
   Settings,
@@ -32,7 +31,6 @@ export function TopBar({
   subtitle,
 }: TopBarProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [hasNotif, setHasNotif] = useState(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,16 +64,6 @@ export function TopBar({
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Filter</span>
-        </button>
-
-        <button
-          onClick={() => setHasNotif(false)}
-          className="relative rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-        >
-          <Bell className="h-4 w-4" />
-          {hasNotif ? (
-            <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-red-500" />
-          ) : null}
         </button>
 
         <div className="mx-1 hidden h-5 w-px bg-gray-200 sm:block" />

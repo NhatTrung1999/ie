@@ -57,6 +57,18 @@ export async function updateTableCtRow(
   }
 }
 
+export async function confirmTableCtRows(payload: {
+  ids: string[];
+  confirmed?: boolean;
+}) {
+  try {
+    const { data } = await apiClient.patch<{ rows: CtRow[] }>('/table-ct/confirm', payload);
+    return data.rows ?? [];
+  } catch (error) {
+    throw new Error(getErrorMessage(error, 'Unable to confirm table rows.'));
+  }
+}
+
 export async function updateTableCtMetrics(
   id: string,
   payload: {

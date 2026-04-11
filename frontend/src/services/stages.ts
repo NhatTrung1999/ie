@@ -9,6 +9,10 @@ const FILE_BASE_URL = (
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof AxiosError) {
+    if (error.code === 'ERR_CANCELED') {
+      return 'Upload canceled.';
+    }
+
     return (
       (typeof error.response?.data?.message === 'string' && error.response.data.message) ||
       (error.code === 'ECONNABORTED' ? 'Request timed out.' : error.message) ||
@@ -53,13 +57,17 @@ export async function fetchStages(filters?: Partial<StageFilters>) {
 }
 
 export async function createStages(payload: {
+  date: string;
   stageCode: string;
   area: StageKey;
   article: string;
   files: File[];
+  onProgress?: (percent: number) => void;
+  signal?: AbortSignal;
 }) {
   try {
     const formData = new FormData();
+    formData.append('date', payload.date);
     formData.append('stageCode', payload.stageCode);
     formData.append('area', payload.area);
     formData.append('article', payload.article);
@@ -70,6 +78,18 @@ export async function createStages(payload: {
     const { data } = await apiClient.post<{ stages?: StageItem[] }>('/stages', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
+      },
+      signal: payload.signal,
+      onUploadProgress: (progressEvent) => {
+        if (!payload.onProgress || !progressEvent.total) {
+          return;
+        }
+
+        const percent = Math.min(
+          100,
+          Math.max(0, Math.round((progressEvent.loaded * 100) / progressEvent.total)),
+        );
+        payload.onProgress(percent);
       },
     });
     return (data.stages ?? []).map(mapStageItem);

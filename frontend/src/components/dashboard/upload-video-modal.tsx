@@ -16,10 +16,13 @@ type UploadVideoModalProps = {
   defaultArea: StageKey;
   onClose: () => void;
   onUpload: (payload: {
+    date: string;
     stageCode: string;
     area: StageKey;
     article: string;
     files: File[];
+    onProgress?: (percent: number) => void;
+    signal?: AbortSignal;
   }) => Promise<void>;
 };
 
@@ -57,6 +60,8 @@ export function UploadVideoModal({
   const [fileError, setFileError] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -85,6 +90,7 @@ export function UploadVideoModal({
     setFileError('');
     setSubmitError('');
     setIsSubmitting(false);
+    setUploadProgress(0);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -93,20 +99,46 @@ export function UploadVideoModal({
 
     try {
       setIsSubmitting(true);
+      setUploadProgress(0);
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       await onUpload({
+        date: formatDateValue(date),
         stageCode: stageCode === 'Choose option' ? cutDie || 'NEW' : stageCode,
         area,
         article,
         files,
+        onProgress: setUploadProgress,
+        signal: abortController.signal,
       });
       resetForm();
+      abortControllerRef.current = null;
     } catch (error) {
+      if (error instanceof Error && error.message === 'Upload canceled.') {
+        resetForm();
+        onClose();
+        abortControllerRef.current = null;
+        return;
+      }
+
       setSubmitError(
         error instanceof Error ? error.message : 'Unable to upload videos right now.',
       );
     } finally {
       setIsSubmitting(false);
+      abortControllerRef.current = null;
     }
+  };
+
+  const handleCancel = () => {
+    if (isSubmitting) {
+      abortControllerRef.current?.abort();
+      return;
+    }
+
+    resetForm();
+    onClose();
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,7 +174,7 @@ export function UploadVideoModal({
             </h2>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleCancel}
             className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
@@ -245,6 +277,21 @@ export function UploadVideoModal({
             ) : null}
           </Field>
 
+          {isSubmitting ? (
+            <div className="space-y-1.5 rounded-xl border border-blue-100 bg-blue-50/80 px-3 py-3">
+              <div className="flex items-center justify-between text-[12px] font-medium text-slate-600">
+                <span>Upload progress</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-blue-100">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500 transition-[width] duration-200"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          ) : null}
+
           {submitError ? (
             <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-500">
               {submitError}
@@ -262,7 +309,7 @@ export function UploadVideoModal({
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleCancel}
               className="h-11 flex-1 rounded-xl bg-red-500 text-[14px] font-semibold text-white transition hover:bg-red-600"
             >
               Cancel
@@ -450,4 +497,11 @@ function normalizeDate(value: Date | string) {
   }
 
   return new Date();
+}
+
+function formatDateValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

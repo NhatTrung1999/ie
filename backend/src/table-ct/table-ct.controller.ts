@@ -4,6 +4,7 @@ import type { Request, Response } from 'express';
 import type { JwtUserPayload } from '../auth/auth.types';
 import { TableCtService } from './table-ct.service';
 import type { ExportTableCtDto } from './dto/export-table-ct.dto';
+import type { ConfirmTableCtRowsDto } from './dto/confirm-table-ct-rows.dto';
 import type { UpdateTableCtMetricsDto } from './dto/update-table-ct-metrics.dto';
 import type { ReorderTableCtDto } from './dto/reorder-table-ct.dto';
 import type { UpdateTableCtDto } from './dto/update-table-ct.dto';
@@ -24,6 +25,11 @@ export class TableCtController {
   @Patch('reorder')
   reorderRows(@Body() payload: ReorderTableCtDto) {
     return this.tableCtService.reorderRows(payload);
+  }
+
+  @Patch('confirm')
+  confirmRows(@Body() payload: ConfirmTableCtRowsDto) {
+    return this.tableCtService.confirmRows(payload);
   }
 
   @Patch(':id')

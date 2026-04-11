@@ -8,16 +8,15 @@ import {
   X,
 } from 'lucide-react';
 
-import { duplicateStage } from '@/services/stages';
+import { duplicateStage, fetchStages } from '@/services/stages';
 import type { StageCategory, StageItem, StageKey } from '@/types/dashboard';
 
 type DuplicateStageModalProps = {
   open: boolean;
   categories: StageCategory[];
   defaultArea: StageKey;
-  items: StageItem[];
   onClose: () => void;
-  onDuplicate: (item: StageItem, targetArea: StageKey) => void;
+  onDuplicate: (items: StageItem[], targetArea: StageKey) => void;
 };
 
 const STAGE_OPTIONS = [
@@ -38,7 +37,6 @@ export function DuplicateStageModal({
   open,
   categories,
   defaultArea,
-  items,
   onClose,
   onDuplicate,
 }: DuplicateStageModalProps) {
@@ -50,7 +48,8 @@ export function DuplicateStageModal({
   const [area, setArea] = useState<StageKey | 'Choose option'>(defaultArea);
   const [article, setArticle] = useState('');
   const [results, setResults] = useState<StageItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
@@ -64,7 +63,8 @@ export function DuplicateStageModal({
     setArea(defaultArea);
     setArticle('');
     setResults([]);
-    setSelectedId(null);
+    setSelectedIds([]);
+    setIsSearching(false);
     setIsSubmitting(false);
     setSubmitError('');
   }, [defaultArea, open, today]);
@@ -72,44 +72,53 @@ export function DuplicateStageModal({
   if (!open) return null;
 
   const handleSearch = () => {
-    const normalizedArticle = article.trim().toLowerCase();
+    setIsSearching(true);
+    setSubmitError('');
 
-    const nextResults = items.filter((item) => {
-      const matchArea = area === 'Choose option' ? true : item.stage === area;
-      const matchArticle =
-        normalizedArticle.length === 0
-          ? true
-          : `${item.code} ${item.name}`.toLowerCase().includes(normalizedArticle);
-      const matchStage =
-        stageCode === 'Choose option'
-          ? true
-          : `${item.code} ${item.name}`.toLowerCase().includes(stageCode.toLowerCase());
-      const matchSeason =
-        season.trim().length === 0
-          ? true
-          : item.name.toLowerCase().includes(season.trim().toLowerCase());
-
-      return matchArea && matchArticle && matchStage && matchSeason;
-    });
-
-    setResults(nextResults);
-    setSelectedId(nextResults[0]?.id ?? null);
+    void fetchStages({
+      keyword: season,
+      dateFrom: formatDateValue(dateFrom),
+      dateTo: formatDateValue(dateTo),
+      stage: stageCode === 'Choose option' ? '' : stageCode,
+      area: area === 'Choose option' ? '' : area,
+      article,
+    })
+      .then((nextResults) => {
+        setResults(nextResults);
+        setSelectedIds(nextResults[0]?.id ? [nextResults[0].id] : []);
+      })
+      .catch((error) => {
+        setResults([]);
+        setSelectedIds([]);
+        setSubmitError(
+          error instanceof Error ? error.message : 'Unable to search stage items.',
+        );
+      })
+      .finally(() => {
+        setIsSearching(false);
+      });
   };
 
-  const selectedItem = results.find((item) => item.id === selectedId) ?? null;
+  const selectedItems = results.filter((item) => selectedIds.includes(item.id));
   const targetArea = area === 'Choose option' ? defaultArea : area;
 
   const handleDuplicate = async () => {
-    if (!selectedItem) return;
+    if (selectedItems.length === 0) return;
 
     try {
       setIsSubmitting(true);
       setSubmitError('');
-      const createdStage = await duplicateStage({
-        sourceId: selectedItem.id,
-        targetArea,
-      });
-      onDuplicate(createdStage, targetArea);
+      const createdStages: StageItem[] = [];
+
+      for (const selectedItem of selectedItems) {
+        const createdStage = await duplicateStage({
+          sourceId: selectedItem.id,
+          targetArea,
+        });
+        createdStages.push(createdStage);
+      }
+
+      onDuplicate(createdStages, targetArea);
     } catch (error) {
       setSubmitError(
         error instanceof Error ? error.message : 'Unable to duplicate stage item.',
@@ -154,80 +163,80 @@ export function DuplicateStageModal({
                   Search Existing Stage
                 </div>
                 <div className="text-[11px] text-slate-400">
-                  Pick a source item, then duplicate it into the selected area.
+                  Pick a source item to duplicate its video and TableCT data into a new stage.
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Field label="Date From">
-              <DateInput value={dateFrom} onChange={setDateFrom} align="left" />
-            </Field>
+              <Field label="Date From">
+                <DateInput value={dateFrom} onChange={setDateFrom} align="left" />
+              </Field>
 
-            <Field label="Date To">
-              <DateInput value={dateTo} onChange={setDateTo} align="left" />
-            </Field>
+              <Field label="Date To">
+                <DateInput value={dateTo} onChange={setDateTo} align="left" />
+              </Field>
 
-            <Field label="Season">
-              <input
-                value={season}
-                onChange={(e) => setSeason(e.target.value)}
-                placeholder="Enter your season..."
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-              />
-            </Field>
+              <Field label="Season">
+                <input
+                  value={season}
+                  onChange={(e) => setSeason(e.target.value)}
+                  placeholder="Enter your season..."
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                />
+              </Field>
 
-            <Field label="Stage">
-              <select
-                value={stageCode}
-                onChange={(e) => setStageCode(e.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-              >
-                {STAGE_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </Field>
+              <Field label="Stage">
+                <select
+                  value={stageCode}
+                  onChange={(e) => setStageCode(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                >
+                  {STAGE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             </div>
 
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_208px]">
-            <Field label="Area">
-              <select
-                value={area}
-                onChange={(e) => setArea(e.target.value as StageKey | 'Choose option')}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-              >
-                <option value="Choose option">Choose option</option>
-                {categories.map((option) => (
-                  <option key={option.id} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
+              <Field label="Area">
+                <select
+                  value={area}
+                  onChange={(e) => setArea(e.target.value as StageKey | 'Choose option')}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                >
+                  <option value="Choose option">Choose option</option>
+                  {categories.map((option) => (
+                    <option key={option.id} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-            <Field label="Article">
-              <input
-                value={article}
-                onChange={(e) => setArticle(e.target.value)}
-                placeholder="Enter your article..."
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-              />
-            </Field>
+              <Field label="Article">
+                <input
+                  value={article}
+                  onChange={(e) => setArticle(e.target.value)}
+                  placeholder="Enter your article..."
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                />
+              </Field>
 
-            <div className="flex items-end">
-              <button
-                type="button"
-                onClick={handleSearch}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-slate-600 to-slate-700 text-[14px] font-semibold text-white transition hover:from-slate-700 hover:to-slate-800"
-              >
-                <Search className="h-4 w-4" />
-                Search
-              </button>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={handleSearch}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-slate-600 to-slate-700 text-[14px] font-semibold text-white transition hover:from-slate-700 hover:to-slate-800"
+                >
+                  <Search className="h-4 w-4" />
+                  Search
+                </button>
+              </div>
             </div>
-          </div>
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
@@ -238,13 +247,15 @@ export function DuplicateStageModal({
                 </div>
                 <div className="text-[11px] text-slate-400">
                   {results.length === 0
-                    ? 'No matched stage found yet.'
+                    ? isSearching
+                      ? 'Searching stage items...'
+                      : 'No matched stage found yet.'
                     : `${results.length} stage item${results.length > 1 ? 's' : ''} found`}
                 </div>
               </div>
-              {selectedItem ? (
+              {selectedItems.length > 0 ? (
                 <div className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-600">
-                  Selected: {selectedItem.code}
+                  Selected: {selectedItems.length}
                 </div>
               ) : null}
             </div>
@@ -253,7 +264,9 @@ export function DuplicateStageModal({
                 <div>
                   <div className="text-[15px] font-semibold text-slate-500">No Data</div>
                   <div className="mt-1 text-[12px] text-slate-400">
-                    Try searching by article, stage, or area to find a source stage.
+                    {isSearching
+                      ? 'Please wait while stage items are loading.'
+                      : 'Try searching by date, article, stage, or area to find a source stage.'}
                   </div>
                 </div>
               </div>
@@ -261,13 +274,19 @@ export function DuplicateStageModal({
               <div className="max-h-[240px] overflow-y-auto p-2">
                 <div className="flex flex-col gap-1.5">
                   {results.map((item) => {
-                    const isSelected = item.id === selectedId;
+                    const isSelected = selectedIds.includes(item.id);
 
                     return (
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => setSelectedId(item.id)}
+                        onClick={() =>
+                          setSelectedIds((current) =>
+                            current.includes(item.id)
+                              ? current.filter((id) => id !== item.id)
+                              : [...current, item.id],
+                          )
+                        }
                         className={[
                           'flex items-center justify-between rounded-xl border px-3 py-2.5 text-left transition',
                           isSelected
@@ -275,12 +294,24 @@ export function DuplicateStageModal({
                             : 'border-transparent bg-white hover:border-slate-200 hover:bg-slate-50',
                         ].join(' ')}
                       >
-                        <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span
+                            className={[
+                              'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition',
+                              isSelected
+                                ? 'border-blue-500 bg-blue-500 text-white'
+                                : 'border-slate-300 bg-white text-transparent',
+                            ].join(' ')}
+                          >
+                            <Copy className="h-2.5 w-2.5" />
+                          </span>
                           <div className="truncate text-[13px] font-semibold text-slate-700">
                             {item.code}. {item.name}
                           </div>
+                        </div>
+                        <div className="ml-3 min-w-0 flex-1">
                           <div className="mt-0.5 text-[11px] text-slate-400">
-                            {item.stage} • {item.duration}
+                            {item.stage} | {item.duration}
                           </div>
                         </div>
                         <div className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">
@@ -303,14 +334,14 @@ export function DuplicateStageModal({
           ) : null}
           <button
             type="button"
-            disabled={!selectedItem || isSubmitting}
+            disabled={selectedItems.length === 0 || isSubmitting}
             onClick={() => {
               void handleDuplicate();
             }}
             className="flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-[14px] font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Copy className="h-4 w-4" />
-            {isSubmitting ? 'Duplicating...' : 'Duplicate'}
+            {isSubmitting ? 'Duplicating...' : `Duplicate${selectedItems.length > 0 ? ` (${selectedItems.length})` : ''}`}
           </button>
           <button
             type="button"
@@ -323,6 +354,13 @@ export function DuplicateStageModal({
       </div>
     </div>
   );
+}
+
+function formatDateValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function Field({
