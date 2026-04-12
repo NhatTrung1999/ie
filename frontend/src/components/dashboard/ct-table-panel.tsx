@@ -70,7 +70,7 @@ export function CtTablePanel({
   const [estimateOutputInput, setEstimateOutputInput] = useState('0');
   const [lsaExportError, setLsaExportError] = useState('');
   const [isExportingLsa, setIsExportingLsa] = useState(false);
-  const activeRow = rows.find((row) => row.stageItemId === activeStageItemId)?.no ?? null;
+  const activeRowStageItemId = activeStageItemId;
   const isLsaCategory = sessionCategory.trim().toUpperCase() === 'LSA';
 
   useEffect(() => {
@@ -164,7 +164,7 @@ export function CtTablePanel({
   };
 
   const handleExport = () => {
-    if (rows.length === 0) {
+    if (rows.length === 0 || rows.some((row) => !row.confirmed)) {
       return;
     }
 
@@ -209,6 +209,7 @@ export function CtTablePanel({
   const capacityPerHour =
     totalCtSeconds > 0 ? Math.round(3600 / totalCtSeconds) : 0;
   const unconfirmedRowIds = rows.filter((row) => !row.confirmed).map((row) => row.id);
+  const canExportWorkbook = rows.length > 0 && unconfirmedRowIds.length === 0;
 
   const handleConfirmMany = async () => {
     if (unconfirmedRowIds.length === 0) {
@@ -228,7 +229,7 @@ export function CtTablePanel({
   };
 
   const handleExportLsa = () => {
-    if (rows.length === 0) {
+    if (rows.length === 0 || rows.some((row) => !row.confirmed)) {
       return;
     }
 
@@ -322,7 +323,12 @@ export function CtTablePanel({
             <Button
               size="sm"
               onClick={handleExportLsa}
-              disabled={rows.length === 0}
+              disabled={!canExportWorkbook}
+              title={
+                canExportWorkbook
+                  ? 'Export Excel LSA'
+                  : 'Please confirm all TableCT rows before exporting.'
+              }
               className="h-8 rounded-lg border border-teal-200 bg-teal-50 px-3 text-[11px] text-teal-700 shadow-none hover:bg-teal-100"
             >
               <FileSpreadsheet className="h-3 w-3" />
@@ -332,7 +338,12 @@ export function CtTablePanel({
             <Button
               size="sm"
               onClick={handleExport}
-              disabled={rows.length === 0}
+              disabled={!canExportWorkbook}
+              title={
+                canExportWorkbook
+                  ? 'Export Excel Time Study'
+                  : 'Please confirm all TableCT rows before exporting.'
+              }
               className="h-8 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-[11px] text-emerald-600 shadow-none hover:bg-emerald-100"
             >
               <FileSpreadsheet className="h-3 w-3" />
@@ -415,7 +426,7 @@ export function CtTablePanel({
                   }}
                   className={cn(
                     'cursor-pointer border-b border-gray-50 transition-all',
-                    activeRow === row.no
+                    activeRowStageItemId === (row.stageItemId ?? null)
                       ? 'bg-linear-to-r from-blue-50/60 to-violet-50/60'
                       : 'hover:bg-gray-50/60',
                     draggingNo === row.no ? 'opacity-60' : ''
@@ -432,7 +443,9 @@ export function CtTablePanel({
                       <span
                         className={cn(
                           'text-xs font-bold',
-                          activeRow === row.no ? 'text-blue-600' : 'text-gray-600'
+                          activeRowStageItemId === (row.stageItemId ?? null)
+                            ? 'text-blue-600'
+                            : 'text-gray-600'
                         )}
                       >
                         {row.no}
@@ -495,7 +508,7 @@ export function CtTablePanel({
                         }}
                         className={cn(
                           'inline-flex min-w-8 items-center justify-center rounded-md px-1 py-0.5 text-xs font-mono transition-colors',
-                          activeRow === row.no && ctIdx === 0
+                          activeRowStageItemId === (row.stageItemId ?? null) && ctIdx === 0
                             ? 'font-bold text-amber-500'
                             : 'text-gray-400',
                           row.confirmed ? 'cursor-not-allowed opacity-60 hover:bg-transparent' : '',

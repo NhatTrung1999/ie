@@ -8,8 +8,11 @@ export class ControlSessionController {
   constructor(private readonly controlSessionService: ControlSessionService) {}
 
   @Get()
-  getSession(@Query('stageCode') stageCode?: string) {
-    return this.controlSessionService.getSession(stageCode);
+  getSession(
+    @Query('stageItemId') stageItemId?: string,
+    @Query('stageCode') stageCode?: string,
+  ) {
+    return this.controlSessionService.getSession({ stageItemId, stageCode });
   }
 
   @Put()

@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
-  Search,
   X,
 } from 'lucide-react';
 
@@ -49,7 +48,6 @@ export function DuplicateStageModal({
   const [article, setArticle] = useState('');
   const [results, setResults] = useState<StageItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
@@ -64,7 +62,6 @@ export function DuplicateStageModal({
     setArticle('');
     setResults([]);
     setSelectedIds([]);
-    setIsSearching(false);
     setIsSubmitting(false);
     setSubmitError('');
   }, [defaultArea, open, today]);
@@ -72,7 +69,6 @@ export function DuplicateStageModal({
   if (!open) return null;
 
   const handleSearch = () => {
-    setIsSearching(true);
     setSubmitError('');
 
     void fetchStages({
@@ -95,7 +91,6 @@ export function DuplicateStageModal({
         );
       })
       .finally(() => {
-        setIsSearching(false);
       });
   };
 
@@ -129,9 +124,9 @@ export function DuplicateStageModal({
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/25 px-4 py-8 backdrop-blur-[2px] sm:py-12">
-      <div className="w-full max-w-[840px] overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+    <div className="absolute inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/25 px-4 py-6 backdrop-blur-[2px] sm:py-8">
+      <div className="w-full max-w-[760px] overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_20px_64px_rgba(15,23,42,0.16)]">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="h-4 w-1 rounded-full bg-gradient-to-b from-blue-500 to-violet-500" />
@@ -139,35 +134,21 @@ export function DuplicateStageModal({
                 Stage Library
               </span>
             </div>
-            <h2 className="text-[21px] font-semibold tracking-tight text-slate-700">
+            <h2 className="text-[20px] font-semibold tracking-tight text-slate-700">
               Duplicate Stage
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-xl p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="space-y-4 px-5 py-5">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-500">
-                <Search className="h-4 w-4" />
-              </div>
-              <div>
-                <div className="text-[13px] font-semibold text-slate-700">
-                  Search Existing Stage
-                </div>
-                <div className="text-[11px] text-slate-400">
-                  Pick a source item to duplicate its video and TableCT data into a new stage.
-                </div>
-              </div>
-            </div>
-
+        <div className="space-y-3 px-4 py-3.5 sm:px-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <Field label="Date From">
                 <DateInput value={dateFrom} onChange={setDateFrom} align="left" />
@@ -182,7 +163,7 @@ export function DuplicateStageModal({
                   value={season}
                   onChange={(e) => setSeason(e.target.value)}
                   placeholder="Enter your season..."
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
                 />
               </Field>
 
@@ -190,7 +171,7 @@ export function DuplicateStageModal({
                 <select
                   value={stageCode}
                   onChange={(e) => setStageCode(e.target.value)}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
                 >
                   {STAGE_OPTIONS.map((option) => (
                     <option key={option} value={option}>
@@ -201,12 +182,12 @@ export function DuplicateStageModal({
               </Field>
             </div>
 
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_208px]">
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_184px]">
               <Field label="Area">
                 <select
                   value={area}
                   onChange={(e) => setArea(e.target.value as StageKey | 'Choose option')}
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
                 >
                   <option value="Choose option">Choose option</option>
                   {categories.map((option) => (
@@ -222,7 +203,7 @@ export function DuplicateStageModal({
                   value={article}
                   onChange={(e) => setArticle(e.target.value)}
                   placeholder="Enter your article..."
-                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
                 />
               </Field>
 
@@ -230,9 +211,8 @@ export function DuplicateStageModal({
                 <button
                   type="button"
                   onClick={handleSearch}
-                  className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-slate-600 to-slate-700 text-[14px] font-semibold text-white transition hover:from-slate-700 hover:to-slate-800"
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-slate-600 to-slate-700 text-[14px] font-semibold text-white transition hover:from-slate-700 hover:to-slate-800"
                 >
-                  <Search className="h-4 w-4" />
                   Search
                 </button>
               </div>
@@ -240,17 +220,10 @@ export function DuplicateStageModal({
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
               <div>
                 <div className="text-[13px] font-semibold text-slate-700">
                   Search Result
-                </div>
-                <div className="text-[11px] text-slate-400">
-                  {results.length === 0
-                    ? isSearching
-                      ? 'Searching stage items...'
-                      : 'No matched stage found yet.'
-                    : `${results.length} stage item${results.length > 1 ? 's' : ''} found`}
                 </div>
               </div>
               {selectedItems.length > 0 ? (
@@ -263,15 +236,10 @@ export function DuplicateStageModal({
               <div className="flex min-h-[120px] items-center justify-center px-4 text-center">
                 <div>
                   <div className="text-[15px] font-semibold text-slate-500">No Data</div>
-                  <div className="mt-1 text-[12px] text-slate-400">
-                    {isSearching
-                      ? 'Please wait while stage items are loading.'
-                      : 'Try searching by date, article, stage, or area to find a source stage.'}
-                  </div>
                 </div>
               </div>
             ) : (
-              <div className="max-h-[240px] overflow-y-auto p-2">
+              <div className="max-h-[220px] overflow-y-auto p-2">
                 <div className="flex flex-col gap-1.5">
                   {results.map((item) => {
                     const isSelected = selectedIds.includes(item.id);
@@ -288,7 +256,7 @@ export function DuplicateStageModal({
                           )
                         }
                         className={[
-                          'flex items-center justify-between rounded-xl border px-3 py-2.5 text-left transition',
+                          'flex items-center justify-between rounded-xl border px-3 py-2 text-left transition',
                           isSelected
                             ? 'border-blue-200 bg-linear-to-r from-blue-50 to-violet-50 shadow-sm'
                             : 'border-transparent bg-white hover:border-slate-200 hover:bg-slate-50',
@@ -311,11 +279,8 @@ export function DuplicateStageModal({
                         </div>
                         <div className="ml-3 min-w-0 flex-1">
                           <div className="mt-0.5 text-[11px] text-slate-400">
-                            {item.stage} | {item.duration}
+                            {item.stage}
                           </div>
-                        </div>
-                        <div className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">
-                          {item.mood}
                         </div>
                       </button>
                     );
@@ -326,7 +291,7 @@ export function DuplicateStageModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-5 py-4">
+        <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 px-4 py-3 sm:px-5">
           {submitError ? (
             <div className="mr-auto rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-500">
               {submitError}
@@ -338,7 +303,7 @@ export function DuplicateStageModal({
             onClick={() => {
               void handleDuplicate();
             }}
-            className="flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 text-[14px] font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-[14px] font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <Copy className="h-4 w-4" />
             {isSubmitting ? 'Duplicating...' : `Duplicate${selectedItems.length > 0 ? ` (${selectedItems.length})` : ''}`}
@@ -346,7 +311,7 @@ export function DuplicateStageModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl bg-red-500 px-5 text-[14px] font-semibold text-white transition hover:bg-red-600"
+            className="h-10 rounded-xl bg-red-500 px-4 text-[14px] font-semibold text-white transition hover:bg-red-600"
           >
             Cancel
           </button>
@@ -443,7 +408,7 @@ function DateInput({
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-left text-[13px] font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+        className="flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-left text-[13px] font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
       >
         <span>{formatDisplayDate(value)}</span>
         <CalendarDays className="h-4 w-4 text-slate-500" />

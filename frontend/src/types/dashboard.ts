@@ -10,6 +10,10 @@ export type StageItem = {
   id: string;
   code: string;
   name: string;
+  processStage?: string;
+  season?: string;
+  cutDie?: string;
+  area?: string;
   article?: string;
   duration: string;
   mood: string;
@@ -20,10 +24,11 @@ export type StageItem = {
 };
 
 export type StageFilters = {
-  keyword: string;
   dateFrom: string;
   dateTo: string;
+  season: string;
   stage: string;
+  cutDie: string;
   area: string;
   article: string;
 };
@@ -40,6 +45,7 @@ export type HistoryItem = {
 
 export type ControlSessionItem = {
   id: string;
+  stageItemId?: string | null;
   stageCode: string;
   elapsed: number;
   isRunning: boolean;

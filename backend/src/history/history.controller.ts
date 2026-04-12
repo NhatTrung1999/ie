@@ -10,8 +10,11 @@ export class HistoryController {
   constructor(private readonly historyService: HistoryService) {}
 
   @Get()
-  getHistory(@Query('stageCode') stageCode?: string) {
-    return this.historyService.listHistory(stageCode);
+  getHistory(
+    @Query('stageItemId') stageItemId?: string,
+    @Query('stageCode') stageCode?: string,
+  ) {
+    return this.historyService.listHistory({ stageItemId, stageCode });
   }
 
   @Post()
@@ -20,8 +23,11 @@ export class HistoryController {
   }
 
   @Patch('commit')
-  commitHistory(@Body('stageCode') stageCode: string) {
-    return this.historyService.commitHistory(stageCode);
+  commitHistory(
+    @Body('stageItemId') stageItemId?: string,
+    @Body('stageCode') stageCode?: string,
+  ) {
+    return this.historyService.commitHistory({ stageItemId, stageCode });
   }
 
   @Delete(':id')

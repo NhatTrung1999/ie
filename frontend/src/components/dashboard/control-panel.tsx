@@ -9,6 +9,7 @@ import {
   addHistoryItem,
   commitHistoryItems,
   saveTableRowMetrics,
+  setSelectedCtCell,
 } from '@/store/slices/dashboard-slice';
 import type { HistoryItem } from '@/types/dashboard';
 
@@ -101,9 +102,10 @@ export function ControlPanel({
     activeStage.trim().toUpperCase() === 'CUTTING';
 
   useEffect(() => {
+    const stageItemId = selectedItem?.id;
     const stageCode = selectedItem?.code;
 
-    if (!stageCode) {
+    if (!stageItemId && !stageCode) {
       setElapsed(0);
       setNva(null);
       setVa(null);
@@ -116,7 +118,10 @@ export function ControlPanel({
     let isCancelled = false;
     setIsHydrating(true);
 
-    void fetchControlSession(stageCode)
+    void fetchControlSession({
+      stageItemId,
+      stageCode,
+    })
       .then((session) => {
         if (isCancelled) return;
 
@@ -148,7 +153,7 @@ export function ControlPanel({
     return () => {
       isCancelled = true;
     };
-  }, [selectedItem?.code]);
+  }, [selectedItem?.code, selectedItem?.id]);
 
   useEffect(() => {
     setElapsed(roundToTwoDecimals(playbackState.currentTime));
@@ -195,7 +200,7 @@ export function ControlPanel({
   }, [deletedHistoryItem]);
 
   useEffect(() => {
-    if (!selectedItem?.code || isHydrating) {
+    if ((!selectedItem?.id && !selectedItem?.code) || isHydrating) {
       return;
     }
 
@@ -205,6 +210,7 @@ export function ControlPanel({
 
     saveTimeoutRef.current = window.setTimeout(() => {
       void saveControlSession({
+        stageItemId: selectedItem.id,
         stageCode: selectedItem.code,
         elapsed: roundToTwoDecimals(playbackState.currentTime),
         isRunning,
@@ -235,6 +241,7 @@ export function ControlPanel({
     nva,
     segmentStart,
     selectedItem?.code,
+    selectedItem?.id,
     skip,
     va,
     playbackState.currentTime,
@@ -277,7 +284,12 @@ export function ControlPanel({
       return;
     }
 
-    const commitResult = await dispatch(commitHistoryItems(selectedItem.code));
+    const commitResult = await dispatch(
+      commitHistoryItems({
+        stageItemId: selectedItem.id,
+        stageCode: selectedItem.code,
+      }),
+    );
 
     if (commitHistoryItems.rejected.match(commitResult)) {
       setSessionError(
@@ -297,6 +309,7 @@ export function ControlPanel({
     setPiecesInput('');
     setLayersInput('');
     setIsCuttingModalOpen(false);
+    dispatch(setSelectedCtCell(null));
   };
 
   const handleDone = async () => {
@@ -343,6 +356,7 @@ export function ControlPanel({
 
     await dispatch(
       addHistoryItem({
+        stageItemId: selectedItem.id,
         stageCode: selectedItem.code,
         startTime: segmentStart,
         endTime,

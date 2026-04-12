@@ -22,11 +22,13 @@ export class TableCtService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    await this.ensureStageListColumns();
     await this.ensureTable();
     await this.ensureSeedData();
   }
 
   async listRows(filters: { stage?: string; stageCode?: string; stageItemId?: string }) {
+    await this.ensureStageListColumns();
     await this.ensureTable();
 
     const normalizedStage = filters.stage?.trim().toUpperCase();
@@ -47,7 +49,7 @@ export class TableCtService implements OnModuleInit {
           where: {
             ...(normalizedStageItemId ? { id: normalizedStageItemId } : {}),
             ...(!normalizedStageItemId && normalizedStageCode ? { code: normalizedStageCode } : {}),
-            ...(normalizedStage ? { stage: normalizedStage } : {}),
+            ...(normalizedStage ? { area: normalizedStage } : {}),
           },
         });
 
@@ -55,7 +57,7 @@ export class TableCtService implements OnModuleInit {
           const parsedIdentity = parseTableIdentity(sourceStage.name, sourceStage.code);
           const sortOrder =
             (await this.prismaService.tableCT.count({
-              where: { stage: sourceStage.stage },
+              where: { stage: sourceStage.area ?? sourceStage.stage },
             })) + 1;
 
           await this.prismaService.tableCT.create({
@@ -63,7 +65,7 @@ export class TableCtService implements OnModuleInit {
               stageItemId: sourceStage.id,
               no: parsedIdentity.code,
               partName: parsedIdentity.partName,
-              stage: sourceStage.stage,
+              stage: sourceStage.area ?? sourceStage.stage,
               ct1: 0,
               ct2: 0,
               ct3: 0,
@@ -350,11 +352,15 @@ export class TableCtService implements OnModuleInit {
 
     await this.prismaService.$transaction(async (tx) => {
       await tx.historyEntry.deleteMany({
-        where: { stageCode: existingRow.no.trim().toUpperCase() },
+        where: existingRow.stageItemId
+          ? { stageItemId: existingRow.stageItemId }
+          : { stageCode: existingRow.no.trim().toUpperCase() },
       });
 
       await tx.controlSession.deleteMany({
-        where: { stageCode: existingRow.no.trim().toUpperCase() },
+        where: existingRow.stageItemId
+          ? { stageItemId: existingRow.stageItemId }
+          : { stageCode: existingRow.no.trim().toUpperCase() },
       });
 
       await tx.tableCT.delete({
@@ -396,6 +402,7 @@ export class TableCtService implements OnModuleInit {
   }
 
   async exportWorkbook(payload: ExportTableCtDto, category?: string) {
+    await this.ensureStageListColumns();
     await this.ensureTable();
 
     const normalizedStage = payload.stage?.trim().toUpperCase();
@@ -446,24 +453,29 @@ export class TableCtService implements OnModuleInit {
       throw new NotFoundException('Time Study template sheet is missing.');
     }
 
-    worksheet.getCell('C3').value = '';
-    worksheet.getCell('I3').value = primaryStageItem?.name || primaryRow.partName;
+    worksheet.getCell('C3').value = primaryStageItem?.season ?? '';
+    worksheet.getCell('I3').value = '';
     worksheet.getCell('C4').value = '';
-    worksheet.getCell('I4').value = primaryStageItem?.article || primaryRow.no;
-    worksheet.getCell('C5').value = normalizedStage;
+    worksheet.getCell('I4').value = primaryStageItem?.article || '';
+    worksheet.getCell('C5').value = '';
     worksheet.getCell('I5').value = '';
 
-    populateCycleTimeSection(
+    const lowerSectionTemplates = captureLowerTimeStudyTemplates(worksheet);
+    const cycleLayout = populateCycleTimeSection(
       worksheet,
       orderedRows.map((row) => this.mapRow(row)),
       category,
     );
-    populateMachineSection(
+    restoreTimeStudyLowerSectionLayout(
       worksheet,
-      orderedRows.map((row) => this.mapRow(row)),
-      category,
+      cycleLayout.insertedRows,
+      lowerSectionTemplates,
     );
 
+    // Keep the lower template sections intact. The cycle-time section above grows
+    // by inserting rows before them, so the original workbook layout moves down
+    // automatically without us re-drawing the observations/photo block.
+    void cycleLayout;
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
 
@@ -474,6 +486,7 @@ export class TableCtService implements OnModuleInit {
   }
 
   async exportLsaWorkbook(payload: ExportTableCtDto, category?: string) {
+    await this.ensureStageListColumns();
     await this.ensureTable();
 
     const normalizedStage = payload.stage?.trim().toUpperCase();
@@ -752,8 +765,47 @@ export class TableCtService implements OnModuleInit {
       SET t.stageItemId = s.id
       FROM [dbo].[TableCT] t
       INNER JOIN [dbo].[StageList] s
-        ON s.code = t.no AND s.stage = t.stage
+        ON s.code = t.no AND ISNULL(s.area, s.stage) = t.stage
       WHERE t.stageItemId IS NULL
+    `);
+  }
+
+  private async ensureStageListColumns() {
+    await this.prismaService.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.StageList', N'U') IS NOT NULL
+         AND COL_LENGTH('dbo.StageList', 'season') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[StageList]
+        ADD [season] NVARCHAR(100) NULL;
+      END
+    `);
+
+    await this.prismaService.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.StageList', N'U') IS NOT NULL
+         AND COL_LENGTH('dbo.StageList', 'cutDie') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[StageList]
+        ADD [cutDie] NVARCHAR(100) NULL;
+      END
+    `);
+
+    await this.prismaService.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.StageList', N'U') IS NOT NULL
+         AND COL_LENGTH('dbo.StageList', 'area') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[StageList]
+        ADD [area] NVARCHAR(50) NULL;
+      END
+    `);
+
+    await this.prismaService.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.StageList', N'U') IS NOT NULL
+         AND COL_LENGTH('dbo.StageList', 'area') IS NOT NULL
+      BEGIN
+        UPDATE [dbo].[StageList]
+        SET [area] = [stage]
+        WHERE [area] IS NULL;
+      END
     `);
   }
 
@@ -808,34 +860,37 @@ function populateCycleTimeSection(
   rows: ReturnType<TableCtService['mapRow']>[],
   category?: string,
 ) {
-  const templateStart = 12;
-  const templateEnd = 14;
-  const nextSectionStart = 15;
-  const requiredRows = rows.length * 3;
+  const templateStart = 13;
+  const templateEnd = 15;
+  const nextSectionStart = 16;
+  const requiredRows = rows.length * 2 + 1;
   const currentRows = templateEnd - templateStart + 1;
   const extraRows = Math.max(0, requiredRows - currentRows);
+  const totalTemplate = captureRowTemplate(worksheet, 15);
 
   if (extraRows > 0) {
     worksheet.insertRows(nextSectionStart, Array.from({ length: extraRows }, () => []), 'i');
   }
 
+  const grandTotalValues = Array.from({ length: 10 }, () => 0);
+
   for (let blockIndex = 0; blockIndex < rows.length; blockIndex += 1) {
-    const sourceRows = [12, 13, 14];
+    const sourceRows = [13, 14];
     const targetRows = [
-      templateStart + blockIndex * 3,
-      templateStart + blockIndex * 3 + 1,
-      templateStart + blockIndex * 3 + 2,
+      templateStart + blockIndex * 2,
+      templateStart + blockIndex * 2 + 1,
     ];
 
     targetRows.forEach((targetRow, index) => {
+      clearMergedRangesForRow(worksheet, targetRow, 1, 23);
       copyRowStyle(worksheet, sourceRows[index], targetRow);
       ensureCycleTimeMerges(worksheet, targetRow);
     });
 
     const row = rows[blockIndex];
-    const totalValues = row.nvaValues.map((value, index) =>
-      roundToTwoDecimals(value + (row.vaValues[index] ?? 0)),
-    );
+    row.nvaValues.forEach((value, index) => {
+      grandTotalValues[index] += value + (row.vaValues[index] ?? 0);
+    });
 
     fillCycleRow(worksheet, targetRows[0], {
       progress: row.no,
@@ -851,50 +906,61 @@ function populateCycleTimeSection(
       values: row.vaValues,
       category,
     });
-    fillCycleRow(worksheet, targetRows[2], {
-      progress: 'Total',
-      partName: '',
-      type: '',
-      values: totalValues,
-      category,
-    });
   }
+
+  const totalRow = templateStart + rows.length * 2;
+  clearMergedRangesForRow(worksheet, totalRow, 1, 23);
+  applyRowTemplate(worksheet, totalTemplate, totalRow);
+  ensureTotalCycleTimeMerges(worksheet, totalRow);
+  fillTotalCycleRow(worksheet, totalRow, {
+    values: grandTotalValues.map((value) => roundToTwoDecimals(value)),
+    category,
+  });
+
+  return {
+    insertedRows: extraRows,
+    totalRow,
+  };
 }
 
 function populateMachineSection(
   worksheet: ExcelJS.Worksheet,
   rows: ReturnType<TableCtService['mapRow']>[],
+  templateStart: number,
   category?: string,
 ) {
-  const templateStart = 17;
-  const nextSectionStart = 24;
-  const templateRows = nextSectionStart - templateStart;
+  const nextSectionStart = 26;
+  const templateRows = 7;
+  const sectionRows = Math.max(rows.length, templateRows);
+  const effectiveNextSectionStart = templateStart + templateRows;
   const extraRows = Math.max(0, rows.length - templateRows);
 
   if (extraRows > 0) {
-    worksheet.insertRows(nextSectionStart, Array.from({ length: extraRows }, () => []), 'i');
+    worksheet.insertRows(
+      effectiveNextSectionStart,
+      Array.from({ length: extraRows }, () => []),
+      'i',
+    );
   }
 
   for (let index = 0; index < rows.length; index += 1) {
     const targetRow = templateStart + index;
 
+    clearMergedRangesForRow(worksheet, targetRow, 1, 12);
     copyRowStyle(worksheet, templateStart, targetRow);
-    ensureMachineSectionMerges(worksheet, targetRow);
+    ensureMachineLeftSectionMerges(worksheet, targetRow);
+  }
 
-    const row = rows[index];
-    const totalValues = row.nvaValues.map((value, ctIndex) =>
-      roundToTwoDecimals(value + (row.vaValues[ctIndex] ?? 0)),
-    );
+  for (let rowNumber = templateStart; rowNumber < templateStart + sectionRows; rowNumber += 1) {
+    clearMergedRangesForRow(worksheet, rowNumber, 13, 23);
+  }
 
-    worksheet.getCell(`A${targetRow}`).value =
-      row.machineType === 'Select..' ? '' : row.machineType;
-    worksheet.getCell(`D${targetRow}`).value = row.partName;
-    worksheet.getCell(`I${targetRow}`).value = row.machineType === 'Select..' ? '' : 1;
-    worksheet.getCell(`K${targetRow}`).value = formatAverageNumber(
-      totalValues,
-      category,
+  mergeIfNeeded(worksheet, `M${templateStart}:W${templateStart}`);
+  if (sectionRows > 1) {
+    mergeIfNeeded(
+      worksheet,
+      `M${templateStart + 1}:W${templateStart + sectionRows - 1}`,
     );
-    worksheet.getCell(`M${targetRow}`).value = '';
   }
 }
 
@@ -912,6 +978,27 @@ function fillCycleRow(
   worksheet.getCell(`A${rowNumber}`).value = payload.progress;
   worksheet.getCell(`C${rowNumber}`).value = payload.partName;
   worksheet.getCell(`H${rowNumber}`).value = payload.type;
+
+  payload.values.forEach((value, index) => {
+    worksheet.getCell(rowNumber, 13 + index).value = roundToTwoDecimals(value);
+  });
+
+  worksheet.getCell(`W${rowNumber}`).value = formatAverageNumber(
+    payload.values,
+    payload.category,
+  );
+}
+
+function fillTotalCycleRow(
+  worksheet: ExcelJS.Worksheet,
+  rowNumber: number,
+  payload: {
+    values: number[];
+    category?: string;
+  },
+) {
+  worksheet.getCell(`A${rowNumber}`).value = 'Total';
+  worksheet.getCell(`M${rowNumber}`).value = '';
 
   payload.values.forEach((value, index) => {
     worksheet.getCell(rowNumber, 13 + index).value = roundToTwoDecimals(value);
@@ -945,18 +1032,281 @@ function copyRowStyle(
   });
 }
 
+function captureRowTemplate(worksheet: ExcelJS.Worksheet, rowNumber: number) {
+  const row = worksheet.getRow(rowNumber);
+  const cells: Array<{ colNumber: number; style: ExcelJS.Style; value: ExcelJS.CellValue }> = [];
+
+  row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    const mergedCell = cell as ExcelJS.Cell & {
+      isMerged?: boolean;
+      master?: ExcelJS.Cell;
+    };
+    const isMergeFollower =
+      Boolean(mergedCell.isMerged) &&
+      mergedCell.master != null &&
+      mergedCell.master.address !== cell.address;
+
+    cells.push({
+      colNumber,
+      style: JSON.parse(JSON.stringify(cell.style)),
+      value: isMergeFollower ? '' : (cell.value ?? ''),
+    });
+  });
+
+  return {
+    height: row.height,
+    cells,
+  };
+}
+
+function applyRowTemplate(
+  worksheet: ExcelJS.Worksheet,
+  template: ReturnType<typeof captureRowTemplate>,
+  targetRowNumber: number,
+) {
+  const targetRow = worksheet.getRow(targetRowNumber);
+  targetRow.height = template.height;
+
+  template.cells.forEach((cellTemplate) => {
+    const targetCell = targetRow.getCell(cellTemplate.colNumber);
+    targetCell.style = JSON.parse(JSON.stringify(cellTemplate.style));
+    targetCell.value = cellTemplate.value;
+  });
+}
+
 function ensureCycleTimeMerges(worksheet: ExcelJS.Worksheet, rowNumber: number) {
+  clearMergedRangesForRow(worksheet, rowNumber, 1, 12);
   mergeIfNeeded(worksheet, `A${rowNumber}:B${rowNumber}`);
   mergeIfNeeded(worksheet, `C${rowNumber}:G${rowNumber}`);
   mergeIfNeeded(worksheet, `H${rowNumber}:L${rowNumber}`);
 }
 
-function ensureMachineSectionMerges(worksheet: ExcelJS.Worksheet, rowNumber: number) {
+function ensureTotalCycleTimeMerges(worksheet: ExcelJS.Worksheet, rowNumber: number) {
+  clearMergedRangesForRow(worksheet, rowNumber, 1, 12);
+  mergeIfNeeded(worksheet, `A${rowNumber}:L${rowNumber}`);
+}
+
+function restoreTimeStudyLowerSectionLayout(
+  worksheet: ExcelJS.Worksheet,
+  rowOffset: number,
+  templates: ReturnType<typeof captureLowerTimeStudyTemplates>,
+) {
+  const observationTitleRow = 17 + rowOffset;
+  const observationHeaderRow = 18 + rowOffset;
+  const observationBodyStartRow = 19 + rowOffset;
+  const observationBodyEndRow = 25 + rowOffset;
+  const additionalTitleRow = 27 + rowOffset;
+  const additionalBodyStartRow = 28 + rowOffset;
+  const additionalBodyEndRow = 34 + rowOffset;
+  const detailsTitleRow = 36 + rowOffset;
+  const detailsBodyStartRow = 37 + rowOffset;
+  const detailsBodyEndRow = 82 + rowOffset;
+
+  for (let row = observationTitleRow; row <= detailsBodyEndRow; row += 1) {
+    clearMergedRangesForRow(worksheet, row, 1, 23);
+  }
+
+  applyRowTemplate(worksheet, templates.observationTitle, observationTitleRow);
+  applyRowTemplate(worksheet, templates.observationHeader, observationHeaderRow);
+  for (let row = observationBodyStartRow; row <= observationBodyEndRow; row += 1) {
+    applyRowTemplate(worksheet, templates.observationBody, row);
+  }
+  applyRowTemplate(worksheet, templates.additionalTitle, additionalTitleRow);
+  for (let row = additionalBodyStartRow; row <= additionalBodyEndRow; row += 1) {
+    applyRowTemplate(worksheet, templates.additionalBody, row);
+  }
+  applyRowTemplate(worksheet, templates.detailsTitle, detailsTitleRow);
+  for (let row = detailsBodyStartRow; row <= detailsBodyEndRow; row += 1) {
+    applyRowTemplate(worksheet, templates.detailsBody, row);
+  }
+
+  mergeIfNeeded(worksheet, `A${observationTitleRow}:W${observationTitleRow}`);
+  mergeIfNeeded(worksheet, `A${observationHeaderRow}:C${observationHeaderRow}`);
+  mergeIfNeeded(worksheet, `D${observationHeaderRow}:H${observationHeaderRow}`);
+  mergeIfNeeded(worksheet, `I${observationHeaderRow}:J${observationHeaderRow}`);
+  mergeIfNeeded(worksheet, `K${observationHeaderRow}:L${observationHeaderRow}`);
+  mergeIfNeeded(worksheet, `M${observationHeaderRow}:W${observationHeaderRow}`);
+
+  for (let row = observationBodyStartRow; row <= observationBodyEndRow; row += 1) {
+    mergeIfNeeded(worksheet, `A${row}:C${row}`);
+    mergeIfNeeded(worksheet, `D${row}:H${row}`);
+    mergeIfNeeded(worksheet, `I${row}:J${row}`);
+    mergeIfNeeded(worksheet, `K${row}:L${row}`);
+  }
+  mergeIfNeeded(worksheet, `M${observationBodyStartRow}:W${observationBodyEndRow}`);
+
+  mergeIfNeeded(worksheet, `A${additionalTitleRow}:W${additionalTitleRow}`);
+  mergeIfNeeded(worksheet, `A${additionalBodyStartRow}:W${additionalBodyEndRow}`);
+
+  mergeIfNeeded(worksheet, `A${detailsTitleRow}:W${detailsTitleRow}`);
+  mergeIfNeeded(worksheet, `A${detailsBodyStartRow}:W${detailsBodyEndRow}`);
+
+  worksheet.getCell(`A${observationTitleRow}`).value =
+    'OTHER OBSERVATIONS:  if any/ if needed';
+  worksheet.getCell(`A${observationHeaderRow}`).value = 'Type of Machine';
+  worksheet.getCell(`D${observationHeaderRow}`).value = 'Process';
+  worksheet.getCell(`I${observationHeaderRow}`).value = 'No. of Machines';
+  worksheet.getCell(`K${observationHeaderRow}`).value = 'CT (in sec)';
+  worksheet.getCell(`M${observationHeaderRow}`).value =
+    'Photo of Finished Components';
+  worksheet.getCell(`A${additionalTitleRow}`).value =
+    'ADDITIONAL NOTES/ RECOMMENDATION:';
+  worksheet.getCell(`A${detailsTitleRow}`).value =
+    'DETAILED PROCESS ILLUSTRATIONS:';
+
+  applyRangeBorder(worksheet, `A${observationTitleRow}:W${observationTitleRow}`, {
+    top: 'medium',
+    left: 'medium',
+    right: 'medium',
+    bottom: 'medium',
+  });
+  applyRangeBorder(worksheet, `A${observationHeaderRow}:W${observationHeaderRow}`, {
+    top: 'thin',
+    left: 'medium',
+    right: 'medium',
+    bottom: 'thin',
+  });
+  applyRangeBorder(worksheet, `A${observationBodyStartRow}:L${observationBodyEndRow}`, {
+    top: 'thin',
+    left: 'medium',
+    right: 'medium',
+    bottom: 'medium',
+    insideHorizontal: 'thin',
+    insideVertical: 'thin',
+  });
+  applyRangeBorder(worksheet, `M${observationBodyStartRow}:W${observationBodyEndRow}`, {
+    top: 'thin',
+    left: 'medium',
+    right: 'medium',
+    bottom: 'medium',
+  });
+  applyRangeBorder(worksheet, `A${additionalTitleRow}:W${additionalTitleRow}`, {
+    top: 'medium',
+    left: 'medium',
+    right: 'medium',
+    bottom: 'thin',
+  });
+  applyRangeBorder(worksheet, `A${additionalBodyStartRow}:W${additionalBodyEndRow}`, {
+    top: 'thin',
+    left: 'medium',
+    right: 'medium',
+    bottom: 'medium',
+  });
+  applyRangeBorder(worksheet, `A${detailsTitleRow}:W${detailsTitleRow}`, {
+    top: 'medium',
+    left: 'medium',
+    right: 'medium',
+    bottom: 'thin',
+  });
+  applyRangeBorder(worksheet, `A${detailsBodyStartRow}:W${detailsBodyEndRow}`, {
+    top: 'thin',
+    left: 'medium',
+    right: 'medium',
+    bottom: 'medium',
+  });
+  clearMergedRowInnerBorders(worksheet, `A${observationTitleRow}:W${observationTitleRow}`);
+  clearMergedRowInnerBorders(worksheet, `A${additionalTitleRow}:W${additionalTitleRow}`);
+  clearMergedRowInnerBorders(worksheet, `A${detailsTitleRow}:W${detailsTitleRow}`);
+}
+
+function captureLowerTimeStudyTemplates(worksheet: ExcelJS.Worksheet) {
+  return {
+    observationTitle: captureRowTemplate(worksheet, 17),
+    observationHeader: captureRowTemplate(worksheet, 18),
+    observationBody: captureRowTemplate(worksheet, 19),
+    additionalTitle: captureRowTemplate(worksheet, 27),
+    additionalBody: captureRowTemplate(worksheet, 28),
+    detailsTitle: captureRowTemplate(worksheet, 36),
+    detailsBody: captureRowTemplate(worksheet, 37),
+  };
+}
+
+function applyRangeBorder(
+  worksheet: ExcelJS.Worksheet,
+  range: string,
+  edges: {
+    top?: ExcelJS.BorderStyle;
+    left?: ExcelJS.BorderStyle;
+    right?: ExcelJS.BorderStyle;
+    bottom?: ExcelJS.BorderStyle;
+    insideHorizontal?: ExcelJS.BorderStyle;
+    insideVertical?: ExcelJS.BorderStyle;
+  },
+) {
+  const [startRef, endRef] = range.split(':');
+  const startCell = worksheet.getCell(startRef);
+  const endCell = worksheet.getCell(endRef);
+  const startRow = startCell.row;
+  const endRow = endCell.row;
+  const startCol = startCell.col;
+  const endCol = endCell.col;
+
+  for (let row = startRow; row <= endRow; row += 1) {
+    for (let col = startCol; col <= endCol; col += 1) {
+      const cell = worksheet.getCell(row, col);
+      const border = JSON.parse(JSON.stringify(cell.border ?? {}));
+
+      if (row === startRow && edges.top) {
+        border.top = { style: edges.top, color: { argb: 'FF000000' } };
+      }
+      if (row === endRow && edges.bottom) {
+        border.bottom = { style: edges.bottom, color: { argb: 'FF000000' } };
+      }
+      if (col === startCol && edges.left) {
+        border.left = { style: edges.left, color: { argb: 'FF000000' } };
+      }
+      if (col === endCol && edges.right) {
+        border.right = { style: edges.right, color: { argb: 'FF000000' } };
+      }
+      if (row < endRow && edges.insideHorizontal) {
+        border.bottom = { style: edges.insideHorizontal, color: { argb: 'FF000000' } };
+      }
+      if (col < endCol && edges.insideVertical) {
+        border.right = { style: edges.insideVertical, color: { argb: 'FF000000' } };
+      }
+
+      cell.border = border;
+    }
+  }
+}
+
+function clearMergedRowInnerBorders(worksheet: ExcelJS.Worksheet, range: string) {
+  const [startRef, endRef] = range.split(':');
+  const startCell = worksheet.getCell(startRef);
+  const endCell = worksheet.getCell(endRef);
+  const row = startCell.row;
+  const startCol = startCell.col;
+  const endCol = endCell.col;
+
+  for (let col = startCol; col <= endCol; col += 1) {
+    const cell = worksheet.getCell(row, col);
+    const border = JSON.parse(JSON.stringify(cell.border ?? {}));
+
+    if (col > startCol) {
+      delete border.left;
+    }
+    if (col < endCol) {
+      delete border.right;
+    }
+
+    if (col === startCol) {
+      border.left = { style: 'medium', color: { argb: 'FF000000' } };
+    }
+    if (col === endCol) {
+      border.right = { style: 'medium', color: { argb: 'FF000000' } };
+    }
+
+    border.top = { style: 'medium', color: { argb: 'FF000000' } };
+    border.bottom = { style: 'medium', color: { argb: 'FF000000' } };
+    cell.border = border;
+  }
+}
+
+function ensureMachineLeftSectionMerges(worksheet: ExcelJS.Worksheet, rowNumber: number) {
   mergeIfNeeded(worksheet, `A${rowNumber}:C${rowNumber}`);
   mergeIfNeeded(worksheet, `D${rowNumber}:H${rowNumber}`);
   mergeIfNeeded(worksheet, `I${rowNumber}:J${rowNumber}`);
   mergeIfNeeded(worksheet, `K${rowNumber}:L${rowNumber}`);
-  mergeIfNeeded(worksheet, `M${rowNumber}:W${rowNumber}`);
 }
 
 function mergeIfNeeded(worksheet: ExcelJS.Worksheet, range: string) {
@@ -972,6 +1322,34 @@ function mergeIfNeeded(worksheet: ExcelJS.Worksheet, range: string) {
 
     throw error;
   }
+}
+
+function clearMergedRangesForRow(
+  worksheet: ExcelJS.Worksheet,
+  rowNumber: number,
+  startColumn: number,
+  endColumn: number,
+) {
+  const merges = (worksheet as ExcelJS.Worksheet & {
+    _merges?: Record<string, { top: number; left: number; bottom: number; right: number }>;
+  })._merges;
+
+  if (!merges) {
+    return;
+  }
+
+  Object.entries(merges).forEach(([range, bounds]) => {
+    const touchesRow = bounds.top <= rowNumber && bounds.bottom >= rowNumber;
+    const touchesColumns = bounds.left <= endColumn && bounds.right >= startColumn;
+
+    if (touchesRow && touchesColumns) {
+      try {
+        worksheet.unMergeCells(range);
+      } catch {
+        // Ignore stale merge metadata and continue rebuilding the row shape.
+      }
+    }
+  });
 }
 
 function formatAverageNumber(values: number[], category?: string) {

@@ -116,12 +116,23 @@ export function PreviewPanel({
     }
   }, [hasVideo, selectedItem?.id]);
 
+  useEffect(() => {
+    if (!videoRef.current) {
+      return;
+    }
+
+    videoRef.current.muted = true;
+    videoRef.current.defaultMuted = true;
+    videoRef.current.volume = 0;
+  }, [selectedItem?.id, hasVideo]);
+
   return (
     <div className="relative min-h-[300px] overflow-hidden bg-[#0a0a0a] md:min-h-[360px] lg:h-[62%] lg:min-h-0">
       <video
         ref={videoRef}
         className="h-full w-full object-contain"
         src={selectedItem?.videoUrl}
+        muted
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={() => setDuration(videoRef.current?.duration || 0)}
         onPlay={() => setIsPlaying(true)}

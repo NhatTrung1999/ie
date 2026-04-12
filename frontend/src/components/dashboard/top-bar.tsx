@@ -44,6 +44,10 @@ export function TopBar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const normalizedDisplayName = displayName.trim().toLowerCase();
+  const isAdminUser =
+    normalizedDisplayName === 'administrator' || normalizedDisplayName === 'admin';
+
   return (
     <header className="flex h-auto shrink-0 items-center justify-between border-b-2 border-gray-100 bg-white px-3 py-2 sm:h-14 sm:px-4 sm:py-0 lg:px-5">
       <div className="flex min-w-0 items-center gap-3 sm:gap-4">
@@ -91,75 +95,74 @@ export function TopBar({
             <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-xl border border-gray-100 bg-white py-1.5 shadow-lg shadow-gray-200/80">
               <div className="mb-1 border-b border-gray-100 px-3 py-2">
                 <p className="text-xs font-semibold text-gray-700">{displayName}</p>
-                <p className="text-[10px] text-gray-400">{subtitle}</p>
               </div>
 
-              {[
-                { icon: User, label: 'Profile', desc: 'View your profile' },
-                { icon: Settings, label: 'Settings', desc: 'App preferences' },
-              ].map(({ icon: Icon, label, desc }) => (
-                <button
-                  key={label}
-                  className="w-full px-3 py-2 text-left transition hover:bg-gray-50"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-100">
-                      <Icon className="h-3.5 w-3.5 text-gray-500" />
+              {isAdminUser ? (
+                <>
+                  {[
+                    { icon: User, label: 'Profile' },
+                    { icon: Settings, label: 'Settings' },
+                  ].map(({ icon: Icon, label }) => (
+                    <button
+                      key={label}
+                      className="w-full px-3 py-2 text-left transition hover:bg-gray-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-100">
+                          <Icon className="h-3.5 w-3.5 text-gray-500" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-gray-700">{label}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+
+                  <button
+                    onClick={onOpenCreateUser}
+                    className="w-full px-3 py-2 text-left transition hover:bg-blue-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50">
+                        <UserPlus className="h-3.5 w-3.5 text-blue-500" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-slate-700">Create user</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-700">{label}</p>
-                      <p className="text-[10px] text-gray-400">{desc}</p>
+                  </button>
+
+                  <button
+                    onClick={onOpenDeleteLogs}
+                    className="w-full px-3 py-2 text-left transition hover:bg-amber-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50">
+                        <ClipboardList className="h-3.5 w-3.5 text-amber-500" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-slate-700">Delete logs</p>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
 
-              <button
-                onClick={onOpenCreateUser}
-                className="w-full px-3 py-2 text-left transition hover:bg-blue-50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-50">
-                    <UserPlus className="h-3.5 w-3.5 text-blue-500" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-slate-700">Create user</p>
-                    <p className="text-[10px] text-slate-400">Add a login account</p>
-                  </div>
-                </div>
-              </button>
+                  <button
+                    onClick={onOpenManageStageCategories}
+                    className="w-full px-3 py-2 text-left transition hover:bg-violet-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-50">
+                        <PanelsTopLeft className="h-3.5 w-3.5 text-violet-500" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-slate-700">Stage categories</p>
+                      </div>
+                    </div>
+                  </button>
+                </>
+              ) : null}
 
-              <button
-                onClick={onOpenDeleteLogs}
-                className="w-full px-3 py-2 text-left transition hover:bg-amber-50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-50">
-                    <ClipboardList className="h-3.5 w-3.5 text-amber-500" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-slate-700">Delete logs</p>
-                    <p className="text-[10px] text-slate-400">View deleted data history</p>
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={onOpenManageStageCategories}
-                className="w-full px-3 py-2 text-left transition hover:bg-violet-50"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-50">
-                    <PanelsTopLeft className="h-3.5 w-3.5 text-violet-500" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-slate-700">Stage categories</p>
-                    <p className="text-[10px] text-slate-400">Manage StageList tabs</p>
-                  </div>
-                </div>
-              </button>
-
-              <div className="mt-1 border-t border-gray-100 pt-1">
+              <div className={isAdminUser ? 'mt-1 border-t border-gray-100 pt-1' : ''}>
                 <button
                   onClick={onSignOut}
                   className="group w-full px-3 py-2 text-left transition hover:bg-red-50"
@@ -170,7 +173,6 @@ export function TopBar({
                     </div>
                     <div>
                       <p className="text-xs font-medium text-red-500">Sign out</p>
-                      <p className="text-[10px] text-gray-400">End your session</p>
                     </div>
                   </div>
                 </button>

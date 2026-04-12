@@ -3,7 +3,6 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  Search,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
@@ -87,17 +86,6 @@ export function FilterPanel({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 py-4">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={draft.keyword}
-              onChange={(e) => setDraft((current) => ({ ...current, keyword: e.target.value }))}
-              placeholder="Search article or file..."
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-            />
-          </div>
-
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Date From">
               <DateInput
@@ -120,6 +108,16 @@ export function FilterPanel({
             </Field>
           </div>
 
+          <Field label="Season">
+            <input
+              type="text"
+              value={draft.season}
+              onChange={(e) => setDraft((current) => ({ ...current, season: e.target.value }))}
+              placeholder="ENTER YOUR SEASON..."
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+            />
+          </Field>
+
           <Field label="Stage">
             <select
               value={draft.stage}
@@ -132,6 +130,16 @@ export function FilterPanel({
                 </option>
               ))}
             </select>
+          </Field>
+
+          <Field label="Cut Die">
+            <input
+              type="text"
+              value={draft.cutDie}
+              onChange={(e) => setDraft((current) => ({ ...current, cutDie: e.target.value }))}
+              placeholder="ENTER YOUR CUTDIE..."
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+            />
           </Field>
 
           <Field label="Area">

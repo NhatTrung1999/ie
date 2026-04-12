@@ -17,7 +17,9 @@ type UploadVideoModalProps = {
   onClose: () => void;
   onUpload: (payload: {
     date: string;
+    season: string;
     stageCode: string;
+    cutDie: string;
     area: StageKey;
     article: string;
     files: File[];
@@ -105,7 +107,9 @@ export function UploadVideoModal({
 
       await onUpload({
         date: formatDateValue(date),
-        stageCode: stageCode === 'Choose option' ? cutDie || 'NEW' : stageCode,
+        season,
+        stageCode,
+        cutDie,
         area,
         article,
         files,
@@ -160,8 +164,8 @@ export function UploadVideoModal({
 
   return (
     <div className="absolute inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/25 px-3 py-6 backdrop-blur-[2px] sm:px-4 sm:py-10">
-      <div className="w-full max-w-[392px] overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.18)]">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-5">
+      <div className="w-full max-w-[432px] overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_20px_64px_rgba(15,23,42,0.16)]">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="h-4 w-1 rounded-full bg-gradient-to-b from-blue-500 to-violet-500" />
@@ -169,81 +173,83 @@ export function UploadVideoModal({
                 Add Stage Video
               </span>
             </div>
-            <h2 className="text-[21px] font-semibold tracking-tight text-slate-700">
+            <h2 className="text-[20px] font-semibold tracking-tight text-slate-700">
               Upload Video
             </h2>
           </div>
           <button
             onClick={handleCancel}
-            className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-xl p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3 px-4 py-4 sm:px-5">
+        <form onSubmit={handleSubmit} className="space-y-3 px-4 py-3.5 sm:px-5">
           <Field label="Date">
             <DateInput value={date} onChange={setDate} />
           </Field>
 
-          <Field label="Season">
-            <input
-              value={season}
-              onChange={(e) => setSeason(e.target.value)}
-              placeholder="ENTER YOUR SEASON..."
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] uppercase text-slate-600 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-            />
-          </Field>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Season">
+              <input
+                value={season}
+                onChange={(e) => setSeason(e.target.value)}
+                placeholder="ENTER YOUR SEASON..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] uppercase text-slate-600 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+              />
+            </Field>
 
-          <Field label="Stage">
-            <select
-              value={stageCode}
-              onChange={(e) => setStageCode(e.target.value)}
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-            >
-              {STAGE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </Field>
+            <Field label="Stage">
+              <select
+                value={stageCode}
+                onChange={(e) => setStageCode(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+              >
+                {STAGE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
-          <Field label="Cut Die">
-            <input
-              value={cutDie}
-              onChange={(e) => setCutDie(e.target.value)}
-              placeholder="ENTER YOUR CUTDIE..."
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] uppercase text-slate-600 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-            />
-          </Field>
+            <Field label="Cut Die">
+              <input
+                value={cutDie}
+                onChange={(e) => setCutDie(e.target.value)}
+                placeholder="ENTER YOUR CUTDIE..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] uppercase text-slate-600 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+              />
+            </Field>
 
-          <Field label="Area">
-            <select
-              value={area}
-              onChange={(e) => setArea(e.target.value as StageKey)}
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-            >
-              {categories.map((option) => (
-                <option key={option.id} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </Field>
+            <Field label="Area">
+              <select
+                value={area}
+                onChange={(e) => setArea(e.target.value as StageKey)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+              >
+                {categories.map((option) => (
+                  <option key={option.id} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
 
           <Field label="Article">
             <input
               value={article}
               onChange={(e) => setArticle(e.target.value)}
               placeholder="ENTER YOUR ARTICLE..."
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] uppercase text-slate-600 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] uppercase text-slate-600 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
             />
           </Field>
 
           <Field label="Video">
-            <label className="flex h-11 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 transition hover:border-slate-300">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-500">
+            <label className="flex h-10 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 transition hover:border-slate-300">
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-500">
                 <FileVideo className="h-4 w-4" />
               </span>
               <span className="min-w-0 flex-1 truncate text-[13px] text-slate-500">
@@ -298,11 +304,11 @@ export function UploadVideoModal({
             </div>
           ) : null}
 
-          <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 pt-0.5 sm:grid-cols-2">
             <button
               type="submit"
               disabled={fileNames.length === 0 || !!fileError || isSubmitting}
-              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.24)] transition hover:from-blue-600 hover:to-blue-700 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
+              className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.24)] transition hover:from-blue-600 hover:to-blue-700 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
             >
               <Upload className="h-4 w-4" />
               {isSubmitting ? 'Uploading...' : 'Upload'}
@@ -310,7 +316,7 @@ export function UploadVideoModal({
             <button
               type="button"
               onClick={handleCancel}
-              className="h-11 flex-1 rounded-xl bg-red-500 text-[14px] font-semibold text-white transition hover:bg-red-600"
+              className="h-10 flex-1 rounded-xl bg-red-500 text-[14px] font-semibold text-white transition hover:bg-red-600"
             >
               Cancel
             </button>
@@ -401,7 +407,7 @@ function DateInput({
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-left text-[13px] font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+        className="flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-left text-[13px] font-medium text-slate-700 outline-none transition hover:border-slate-300 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
       >
         <span>{formatDisplayDate(normalizedValue)}</span>
         <CalendarDays className="h-4 w-4 text-slate-500" />

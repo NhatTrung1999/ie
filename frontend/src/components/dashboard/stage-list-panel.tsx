@@ -99,7 +99,9 @@ export function StageListPanel({
           <div className="flex items-center gap-1">
             <button
               onClick={onToggleHideCompleted}
-              title={hideCompleted ? 'Show completed items' : 'Hide completed items'}
+              title={
+                hideCompleted ? 'Show completed items' : 'Hide completed items'
+              }
               className={cn(
                 'rounded-lg p-1.5 transition',
                 hideCompleted
@@ -146,7 +148,7 @@ export function StageListPanel({
                   'h-9 shrink-0 whitespace-nowrap rounded-xl px-3 text-[11px] font-semibold tracking-wide transition-all',
                   activeStage === tab.value
                     ? 'bg-white text-slate-700 shadow-sm'
-                    : 'text-slate-400 hover:text-slate-600'
+                    : 'text-slate-400 hover:text-slate-600',
                 )}
                 onDragStart={(e) => e.preventDefault()}
               >
@@ -165,7 +167,7 @@ export function StageListPanel({
             </div>
           ) : null}
 
-          {items.map((item, index) => {
+          {items.map((item) => {
             const isActive = selectedItemId === item.id;
 
             return (
@@ -208,7 +210,7 @@ export function StageListPanel({
                   draggingId === item.id ? 'scale-[0.98] opacity-60' : '',
                   dragOverId === item.id && draggingId !== item.id
                     ? 'border-blue-300 bg-blue-50/70 ring-1 ring-blue-200'
-                    : ''
+                    : '',
                 )}
               >
                 {dragOverId === item.id && draggingId !== item.id ? (
@@ -222,20 +224,24 @@ export function StageListPanel({
                 <GripVertical
                   className={cn(
                     'h-3.5 w-3.5 shrink-0 cursor-grab transition active:cursor-grabbing',
-                    isActive ? 'text-blue-300' : 'text-gray-200 group-hover:text-gray-400'
+                    isActive
+                      ? 'text-blue-300'
+                      : 'text-gray-200 group-hover:text-gray-400',
                   )}
                 />
 
                 <div
                   className={cn(
                     'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition',
-                    isActive ? 'bg-blue-100' : 'bg-gray-100 group-hover:bg-gray-200'
+                    isActive
+                      ? 'bg-blue-100'
+                      : 'bg-gray-100 group-hover:bg-gray-200',
                   )}
                 >
                   <FileVideo
                     className={cn(
                       'h-3 w-3 transition',
-                      isActive ? 'text-blue-600' : 'text-gray-400'
+                      isActive ? 'text-blue-600' : 'text-gray-400',
                     )}
                   />
                 </div>
@@ -246,13 +252,10 @@ export function StageListPanel({
                       'truncate text-xs font-medium transition',
                       isActive
                         ? 'text-blue-700'
-                        : 'text-gray-600 group-hover:text-gray-800'
+                        : 'text-gray-600 group-hover:text-gray-800',
                     )}
                   >
                     {item.code}. {item.name}
-                  </p>
-                  <p className="text-[9px] text-gray-400">
-                    {item.completed ? 'Completed' : `Stage ${index + 1}`}
                   </p>
                 </div>
 

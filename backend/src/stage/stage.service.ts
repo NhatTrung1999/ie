@@ -31,27 +31,28 @@ export class StageService implements OnModuleInit {
     await this.ensureStageTable();
 
     const where: Prisma.StageListWhereInput = {};
-    const normalizedKeyword = filters.keyword?.trim();
-    const normalizedStageCode = filters.stage?.trim();
+    const normalizedSeason = filters.season?.trim();
+    const normalizedProcessStage = filters.stage?.trim();
+    const normalizedCutDie = filters.cutDie?.trim();
     const normalizedArea = filters.area?.trim().toUpperCase();
     const normalizedArticle = filters.article?.trim();
     const dateFrom = parseDateFilter(filters.dateFrom, 'Date from');
     const dateTo = parseDateFilter(filters.dateTo, 'Date to');
 
-    if (normalizedKeyword) {
-      where.OR = [
-        { name: { contains: normalizedKeyword } },
-        { code: { contains: normalizedKeyword } },
-        { article: { contains: normalizedKeyword } },
-      ];
+    if (normalizedSeason) {
+      where.season = { contains: normalizedSeason };
     }
 
-    if (normalizedStageCode && normalizedStageCode !== 'Choose option') {
-      where.code = { contains: normalizedStageCode };
+    if (normalizedProcessStage && normalizedProcessStage !== 'Choose option') {
+      where.stage = { contains: normalizedProcessStage };
+    }
+
+    if (normalizedCutDie) {
+      where.cutDie = { contains: normalizedCutDie };
     }
 
     if (normalizedArea && normalizedArea !== 'CHOOSE OPTION') {
-      where.stage = normalizedArea;
+      where.area = normalizedArea;
     }
 
     if (normalizedArticle) {
@@ -60,7 +61,7 @@ export class StageService implements OnModuleInit {
 
     const stages = await this.prismaService.stageList.findMany({
       where,
-      orderBy: [{ stage: 'asc' }, { sortOrder: 'asc' }, { id: 'asc' }],
+      orderBy: [{ area: 'asc' }, { sortOrder: 'asc' }, { id: 'asc' }],
     });
     const filteredStages = stages.filter((item) => {
       const effectiveDate = item.stageDate ?? item.createdAt;
@@ -86,7 +87,7 @@ export class StageService implements OnModuleInit {
                 {
                   stageItemId: null,
                   no: { in: filteredStages.map((item) => item.code.trim().toUpperCase()) },
-                  stage: { in: filteredStages.map((item) => item.stage) },
+                  stage: { in: filteredStages.map((item) => (item.area ?? item.stage).trim().toUpperCase()) },
                 },
               ],
             },
@@ -114,16 +115,20 @@ export class StageService implements OnModuleInit {
       stages: filteredStages.map((item) => {
         const parsedIdentity = parseStageIdentity(item.name, item.code);
         const completionKey = item.id;
-        const fallbackCompletionKey = `${item.stage.trim().toUpperCase()}::${parsedIdentity.code}`;
+        const fallbackCompletionKey = `${(item.area ?? item.stage).trim().toUpperCase()}::${parsedIdentity.code}`;
 
         return {
           id: item.id,
           code: parsedIdentity.code,
           name: parsedIdentity.name,
+          processStage: item.stage,
+          season: item.season ?? '',
+          cutDie: item.cutDie ?? '',
+          area: item.area ?? item.stage,
           article: item.article ?? '',
           duration: item.duration,
           mood: item.mood,
-          stage: item.stage,
+          stage: item.area ?? item.stage,
           stageDate: item.stageDate?.toISOString().slice(0, 10) ?? null,
           completed:
             completionMap.get(completionKey) ??
@@ -142,8 +147,12 @@ export class StageService implements OnModuleInit {
       payload.area,
       'Area',
     );
+    const selectedProcessStage =
+      payload.stageCode?.trim() && payload.stageCode.trim() !== 'Choose option'
+        ? payload.stageCode.trim()
+        : null;
     const selectedStageDate = parseStageDate(payload.date);
-    const baseCode = payload.stageCode?.trim().toUpperCase() || 'NEW';
+    const baseCode = payload.cutDie?.trim().toUpperCase() || 'NEW';
     const uploadedFiles = files.filter(Boolean);
 
     if (uploadedFiles.length === 0) {
@@ -154,7 +163,7 @@ export class StageService implements OnModuleInit {
 
     try {
       const stageCount = await this.prismaService.stageList.count({
-        where: { stage: normalizedArea },
+        where: { area: normalizedArea },
       });
       createdStages = await this.prismaService.$transaction(async (tx) => {
         const created: Prisma.StageListGetPayload<Record<string, never>>[] = [];
@@ -168,10 +177,13 @@ export class StageService implements OnModuleInit {
             data: {
               code: parsedIdentity.code,
               name: parsedIdentity.name,
+              stage: selectedProcessStage ?? normalizedArea,
+              season: payload.season?.trim() || null,
+              cutDie: payload.cutDie?.trim() || null,
+              area: normalizedArea,
               article: payload.article?.trim() || null,
               duration: '00:00',
               mood: 'NVA',
-              stage: normalizedArea,
               filePath: file.path,
               stageDate: selectedStageDate,
               sortOrder: stageCount + index + 1,
@@ -205,10 +217,14 @@ export class StageService implements OnModuleInit {
           id: item.id,
           code: parsedIdentity.code,
           name: parsedIdentity.name,
+          processStage: item.stage,
+          season: item.season ?? '',
+          cutDie: item.cutDie ?? '',
+          area: item.area ?? item.stage,
           article: item.article ?? '',
           duration: item.duration,
           mood: item.mood,
-          stage: item.stage,
+          stage: item.area ?? item.stage,
           stageDate: item.stageDate?.toISOString().slice(0, 10) ?? null,
           completed: false,
           videoUrl: item.filePath ? `/uploads/stages/${basename(item.filePath)}` : undefined,
@@ -239,7 +255,7 @@ export class StageService implements OnModuleInit {
     }
 
     const targetCount = await this.prismaService.stageList.count({
-      where: { stage: targetArea },
+      where: { area: targetArea },
     });
     const relatedCopies = await this.prismaService.stageList.count({
       where: {
@@ -260,10 +276,13 @@ export class StageService implements OnModuleInit {
         data: {
           code: duplicateCode,
           name: duplicateName,
+          stage: sourceStage.stage,
+          season: sourceStage.season,
+          cutDie: sourceStage.cutDie,
+          area: targetArea,
           article: sourceStage.article,
           duration: sourceStage.duration,
           mood: sourceStage.mood,
-          stage: targetArea,
           filePath: duplicatedFilePath,
           stageDate: sourceStage.stageDate ?? new Date(),
           sortOrder: targetCount + 1,
@@ -277,7 +296,7 @@ export class StageService implements OnModuleInit {
             {
               stageItemId: null,
               no: sourceStage.code,
-              stage: sourceStage.stage,
+              stage: sourceStage.area ?? sourceStage.stage,
             },
           ],
         },
@@ -357,10 +376,14 @@ export class StageService implements OnModuleInit {
         id: duplicatedStage.id,
         code: parsedIdentity.code,
         name: parsedIdentity.name,
+        processStage: duplicatedStage.stage,
+        season: duplicatedStage.season ?? '',
+        cutDie: duplicatedStage.cutDie ?? '',
+        area: duplicatedStage.area ?? duplicatedStage.stage,
         article: duplicatedStage.article ?? '',
         duration: duplicatedStage.duration,
         mood: duplicatedStage.mood,
-        stage: duplicatedStage.stage,
+        stage: duplicatedStage.area ?? duplicatedStage.stage,
         stageDate: duplicatedStage.stageDate?.toISOString().slice(0, 10) ?? null,
         completed: false,
         videoUrl: duplicatedStage.filePath
@@ -384,7 +407,7 @@ export class StageService implements OnModuleInit {
     }
 
     const existingItems = await this.prismaService.stageList.findMany({
-      where: { stage: normalizedStage },
+      where: { area: normalizedStage },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
 
@@ -435,13 +458,19 @@ export class StageService implements OnModuleInit {
 
       await tx.historyEntry.deleteMany({
         where: {
-          stageCode: parsedIdentity.code,
+          OR: [
+            { stageItemId: targetStage.id },
+            { stageCode: parsedIdentity.code },
+          ],
         },
       });
 
       await tx.controlSession.deleteMany({
         where: {
-          stageCode: parsedIdentity.code,
+          OR: [
+            { stageItemId: targetStage.id },
+            { stageCode: parsedIdentity.code },
+          ],
         },
       });
 
@@ -451,14 +480,14 @@ export class StageService implements OnModuleInit {
             { stageItemId: targetStage.id },
             {
               no: parsedIdentity.code,
-              stage: targetStage.stage,
+              stage: targetStage.area ?? targetStage.stage,
             },
           ],
         },
       });
 
       const remainingItems = await tx.stageList.findMany({
-        where: { stage: targetStage.stage },
+        where: { area: targetStage.area ?? targetStage.stage },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
       });
 
@@ -492,13 +521,16 @@ export class StageService implements OnModuleInit {
       actor,
       entityType: 'StageList',
       entityId: targetStage.id,
-      entityLabel: `${parsedIdentity.code} - ${parsedIdentity.name}`,
-      metadata: {
-        code: parsedIdentity.code,
-        name: parsedIdentity.name,
-        stage: targetStage.stage,
-        article: targetStage.article ?? null,
-        filePath: targetStage.filePath ?? null,
+        entityLabel: `${parsedIdentity.code} - ${parsedIdentity.name}`,
+        metadata: {
+          code: parsedIdentity.code,
+          name: parsedIdentity.name,
+          season: targetStage.season ?? null,
+          cutDie: targetStage.cutDie ?? null,
+          area: targetStage.area ?? targetStage.stage,
+          stage: targetStage.stage,
+          article: targetStage.article ?? null,
+          filePath: targetStage.filePath ?? null,
       },
     });
 
@@ -541,6 +573,9 @@ export class StageService implements OnModuleInit {
           [id] UNIQUEIDENTIFIER NOT NULL CONSTRAINT [StageList_id_df] DEFAULT NEWID(),
           [code] NVARCHAR(50) NOT NULL,
           [name] NVARCHAR(255) NOT NULL,
+          [season] NVARCHAR(100) NULL,
+          [cutDie] NVARCHAR(100) NULL,
+          [area] NVARCHAR(50) NULL,
           [article] NVARCHAR(255) NULL,
           [duration] NVARCHAR(20) NOT NULL,
           [mood] NVARCHAR(20) NOT NULL,
@@ -603,6 +638,9 @@ export class StageService implements OnModuleInit {
         {
           code: 'C10',
           name: 'Tears.mp4',
+          season: 'JENNIE',
+          cutDie: 'CUT-10',
+          area: 'CUTTING',
           article: 'JENNIE',
           duration: '03:44',
           mood: 'NVA',
@@ -612,6 +650,9 @@ export class StageService implements OnModuleInit {
         {
           code: 'C4',
           name: 'Your Love.mp4',
+          season: 'JENNIE',
+          cutDie: 'CUT-4',
+          area: 'CUTTING',
           article: 'JENNIE',
           duration: '05:34',
           mood: 'VA',
@@ -621,6 +662,9 @@ export class StageService implements OnModuleInit {
         {
           code: 'C3',
           name: 'Hugs & Kisses.mp4',
+          season: 'JENNIE',
+          cutDie: 'CUT-3',
+          area: 'CUTTING',
           article: 'JENNIE',
           duration: '03:12',
           mood: 'NVA',
@@ -630,6 +674,9 @@ export class StageService implements OnModuleInit {
         {
           code: 'C2',
           name: 'You & Me.mp4',
+          season: 'JENNIE',
+          cutDie: 'CUT-2',
+          area: 'CUTTING',
           article: 'JENNIE',
           duration: '04:59',
           mood: 'NVA',

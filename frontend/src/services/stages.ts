@@ -58,7 +58,9 @@ export async function fetchStages(filters?: Partial<StageFilters>) {
 
 export async function createStages(payload: {
   date: string;
+  season: string;
   stageCode: string;
+  cutDie: string;
   area: StageKey;
   article: string;
   files: File[];
@@ -68,7 +70,9 @@ export async function createStages(payload: {
   try {
     const formData = new FormData();
     formData.append('date', payload.date);
+    formData.append('season', payload.season);
     formData.append('stageCode', payload.stageCode);
+    formData.append('cutDie', payload.cutDie);
     formData.append('area', payload.area);
     formData.append('article', payload.article);
     payload.files.forEach((file) => {

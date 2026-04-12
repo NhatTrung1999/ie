@@ -153,9 +153,12 @@ export const saveTableRowMetrics = createAsyncThunk(
 
 export const loadHistoryItems = createAsyncThunk(
   'dashboard/loadHistoryItems',
-  async (stageCode: string | undefined, { rejectWithValue }) => {
+  async (
+    filters: { stageItemId?: string; stageCode?: string } | undefined,
+    { rejectWithValue },
+  ) => {
     try {
-      return await fetchHistory(stageCode);
+      return await fetchHistory(filters);
     } catch (error) {
       return rejectWithValue(
         error instanceof Error ? error.message : 'Unable to load history items.',
@@ -169,6 +172,7 @@ export const addHistoryItem = createAsyncThunk(
   async (
     payload: {
       stageCode: string;
+      stageItemId?: string;
       startTime: number;
       endTime: number;
       type: 'NVA' | 'VA' | 'SKIP';
@@ -202,9 +206,12 @@ export const removeHistoryItem = createAsyncThunk(
 
 export const commitHistoryItems = createAsyncThunk(
   'dashboard/commitHistoryItems',
-  async (stageCode: string, { rejectWithValue }) => {
+  async (
+    payload: { stageItemId?: string; stageCode?: string },
+    { rejectWithValue },
+  ) => {
     try {
-      return await commitHistory(stageCode);
+      return await commitHistory(payload);
     } catch (error) {
       return rejectWithValue(
         error instanceof Error ? error.message : 'Unable to commit history items.',

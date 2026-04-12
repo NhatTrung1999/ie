@@ -21,6 +21,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async onModuleInit() {
     await this.$connect();
+    await this.ensureStageListColumns();
+    await this.ensureStageItemLinkColumns();
   }
 
   async enableShutdownHooks(app: INestApplication) {
@@ -35,6 +37,80 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   get machineType() {
     return super.machineType;
+  }
+
+  private async ensureStageListColumns() {
+    await this.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.StageList', N'U') IS NOT NULL
+         AND COL_LENGTH('dbo.StageList', 'season') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[StageList]
+        ADD [season] NVARCHAR(100) NULL;
+      END
+    `);
+
+    await this.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.StageList', N'U') IS NOT NULL
+         AND COL_LENGTH('dbo.StageList', 'cutDie') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[StageList]
+        ADD [cutDie] NVARCHAR(100) NULL;
+      END
+    `);
+
+    await this.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.StageList', N'U') IS NOT NULL
+         AND COL_LENGTH('dbo.StageList', 'area') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[StageList]
+        ADD [area] NVARCHAR(50) NULL;
+      END
+    `);
+
+    await this.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.StageList', N'U') IS NOT NULL
+         AND COL_LENGTH('dbo.StageList', 'area') IS NOT NULL
+      BEGIN
+        UPDATE [dbo].[StageList]
+        SET [area] = [stage]
+        WHERE [area] IS NULL;
+      END
+    `);
+  }
+
+  private async ensureStageItemLinkColumns() {
+    await this.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.HistoryPlayback', N'U') IS NOT NULL
+         AND COL_LENGTH('dbo.HistoryPlayback', 'stageItemId') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[HistoryPlayback]
+        ADD [stageItemId] UNIQUEIDENTIFIER NULL;
+      END
+    `);
+
+    await this.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.ControlPanel', N'U') IS NOT NULL
+         AND COL_LENGTH('dbo.ControlPanel', 'stageItemId') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[ControlPanel]
+        ADD [stageItemId] UNIQUEIDENTIFIER NULL;
+      END
+    `);
+
+    await this.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.ControlPanel', N'U') IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1
+           FROM sys.indexes
+           WHERE name = 'ControlPanel_stageItemId_key'
+             AND object_id = OBJECT_ID(N'dbo.ControlPanel')
+         )
+      BEGIN
+        CREATE UNIQUE NONCLUSTERED INDEX [ControlPanel_stageItemId_key]
+        ON [dbo].[ControlPanel] ([stageItemId])
+        WHERE [stageItemId] IS NOT NULL;
+      END
+    `);
   }
 }
 

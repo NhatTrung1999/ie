@@ -22,7 +22,7 @@ export function HistoryPanel({ onDeleteApplied, onSelectItem }: HistoryPanelProp
       <div className="flex shrink-0 items-center gap-1.5 px-3 py-2.5">
         <History className="h-3.5 w-3.5 text-gray-400" />
         <span className="text-[11px] font-bold tracking-widest text-gray-500 uppercase">
-          History
+          History Playback
         </span>
         {historyItems.length > 0 ? (
           <span className="ml-auto rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold text-gray-500">
@@ -43,7 +43,7 @@ export function HistoryPanel({ onDeleteApplied, onSelectItem }: HistoryPanelProp
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-100">
               <History className="h-4 w-4 text-gray-300" />
             </div>
-            <p className="text-[11px] text-gray-400">No history yet</p>
+            <p className="text-[11px] text-gray-400">No history playback yet</p>
           </div>
         ) : (
           historyItems.map((entry) => {

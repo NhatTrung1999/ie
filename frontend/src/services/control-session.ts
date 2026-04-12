@@ -15,12 +15,21 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-export async function fetchControlSession(stageCode?: string) {
+export async function fetchControlSession(filters?: {
+  stageItemId?: string;
+  stageCode?: string;
+}) {
   try {
     const { data } = await apiClient.get<{ session?: ControlSessionItem | null }>(
       '/control-session',
       {
-        params: stageCode ? { stageCode } : undefined,
+        params:
+          filters?.stageItemId || filters?.stageCode
+            ? {
+                ...(filters.stageItemId ? { stageItemId: filters.stageItemId } : {}),
+                ...(filters.stageCode ? { stageCode: filters.stageCode } : {}),
+              }
+            : undefined,
       },
     );
 
@@ -31,6 +40,7 @@ export async function fetchControlSession(stageCode?: string) {
 }
 
 export async function saveControlSession(payload: {
+  stageItemId?: string;
   stageCode: string;
   elapsed: number;
   isRunning: boolean;

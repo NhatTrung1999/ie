@@ -1,8 +1,9 @@
 export type ListStagesDto = {
-  keyword?: string;
   dateFrom?: string;
   dateTo?: string;
+  season?: string;
   stage?: string;
+  cutDie?: string;
   area?: string;
   article?: string;
 };

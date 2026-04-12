@@ -16,11 +16,26 @@ export class HistoryService implements OnModuleInit {
     await this.ensureTable();
   }
 
-  async listHistory(stageCode?: string) {
+  async listHistory(filters: { stageItemId?: string; stageCode?: string }) {
     await this.ensureTable();
 
-    const normalizedStageCode = stageCode?.trim().toUpperCase();
-    const isLocked = normalizedStageCode
+    const normalizedStageItemId = filters.stageItemId?.trim();
+    const normalizedStageCode = filters.stageCode?.trim().toUpperCase();
+    const historyWhere = normalizedStageItemId
+      ? { stageItemId: normalizedStageItemId }
+      : normalizedStageCode
+        ? { stageCode: normalizedStageCode }
+        : undefined;
+
+    const isLocked = normalizedStageItemId
+      ? await this.prismaService.tableCT.findFirst({
+          where: {
+            stageItemId: normalizedStageItemId,
+            confirmed: true,
+          },
+          select: { id: true },
+        }).then((row) => Boolean(row))
+      : normalizedStageCode
       ? await this.prismaService.tableCT.findFirst({
           where: {
             no: normalizedStageCode,
@@ -31,7 +46,7 @@ export class HistoryService implements OnModuleInit {
       : false;
 
     const rows = await this.prismaService.historyEntry.findMany({
-      where: normalizedStageCode ? { stageCode: normalizedStageCode } : undefined,
+      where: historyWhere,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
 
@@ -63,6 +78,7 @@ export class HistoryService implements OnModuleInit {
 
     const created = await this.prismaService.historyEntry.create({
       data: {
+        stageItemId: payload.stageItemId?.trim() || null,
         stageCode,
         startTime: payload.startTime,
         endTime: payload.endTime,
@@ -85,18 +101,23 @@ export class HistoryService implements OnModuleInit {
     };
   }
 
-  async commitHistory(stageCode: string) {
+  async commitHistory(filters: { stageItemId?: string; stageCode?: string }) {
     await this.ensureTable();
 
-    const normalizedStageCode = stageCode?.trim().toUpperCase();
+    const normalizedStageItemId = filters.stageItemId?.trim();
+    const normalizedStageCode = filters.stageCode?.trim().toUpperCase();
 
-    if (!normalizedStageCode) {
-      throw new BadRequestException('Stage code is required.');
+    if (!normalizedStageItemId && !normalizedStageCode) {
+      throw new BadRequestException('Stage item id or stage code is required.');
     }
+
+    const historyWhere = normalizedStageItemId
+      ? { stageItemId: normalizedStageItemId }
+      : { stageCode: normalizedStageCode! };
 
     await this.prismaService.historyEntry.updateMany({
       where: {
-        stageCode: normalizedStageCode,
+        ...historyWhere,
         committed: false,
       },
       data: {
@@ -105,17 +126,24 @@ export class HistoryService implements OnModuleInit {
     });
 
     const rows = await this.prismaService.historyEntry.findMany({
-      where: { stageCode: normalizedStageCode },
+      where: historyWhere,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
 
-    const isLocked = await this.prismaService.tableCT.findFirst({
-      where: {
-        no: normalizedStageCode,
-        confirmed: true,
-      },
-      select: { id: true },
-    }).then((row) => Boolean(row));
+    const isLocked = await this.prismaService.tableCT
+      .findFirst({
+        where: normalizedStageItemId
+          ? {
+              stageItemId: normalizedStageItemId,
+              confirmed: true,
+            }
+          : {
+              no: normalizedStageCode,
+              confirmed: true,
+            },
+        select: { id: true },
+      })
+      .then((row) => Boolean(row));
 
     return {
       items: rows.map((row) => ({
@@ -152,10 +180,15 @@ export class HistoryService implements OnModuleInit {
     }
 
     const isLocked = await this.prismaService.tableCT.findFirst({
-      where: {
-        no: existing.stageCode,
-        confirmed: true,
-      },
+      where: existing.stageItemId
+        ? {
+            stageItemId: existing.stageItemId,
+            confirmed: true,
+          }
+        : {
+            no: existing.stageCode,
+            confirmed: true,
+          },
       select: { id: true },
     });
 
@@ -171,11 +204,12 @@ export class HistoryService implements OnModuleInit {
 
     await this.deleteLogService.logDelete({
       actor,
-      entityType: 'HistoryEntry',
+      entityType: 'HistoryPlayback',
       entityId: existing.id,
       entityLabel: `${existing.stageCode} - ${existing.type}`,
       metadata: {
         stageCode: existing.stageCode,
+        stageItemId: existing.stageItemId,
         startTime: existing.startTime,
         endTime: existing.endTime,
         type: existing.type,
@@ -189,46 +223,65 @@ export class HistoryService implements OnModuleInit {
 
   private async ensureTable() {
     await this.prismaService.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.History', N'U') IS NOT NULL
+         AND OBJECT_ID(N'dbo.HistoryPlayback', N'U') IS NULL
+      BEGIN
+        EXEC sp_rename 'dbo.History', 'HistoryPlayback';
+      END
+
       IF OBJECT_ID(N'dbo.HistoryEntry', N'U') IS NOT NULL
+         AND OBJECT_ID(N'dbo.HistoryPlayback', N'U') IS NULL
+      BEGIN
+        EXEC sp_rename 'dbo.HistoryEntry', 'HistoryPlayback';
+      END
+
+      IF OBJECT_ID(N'dbo.HistoryPlayback', N'U') IS NOT NULL
          AND EXISTS (
            SELECT 1
            FROM sys.columns c
            INNER JOIN sys.types t ON c.user_type_id = t.user_type_id
-           WHERE c.object_id = OBJECT_ID(N'dbo.HistoryEntry')
+           WHERE c.object_id = OBJECT_ID(N'dbo.HistoryPlayback')
              AND c.name = 'id'
              AND t.name <> 'uniqueidentifier'
          )
       BEGIN
-        DROP TABLE [dbo].[HistoryEntry];
+        DROP TABLE [dbo].[HistoryPlayback];
       END
 
-      IF OBJECT_ID(N'dbo.HistoryEntry', N'U') IS NULL
+      IF OBJECT_ID(N'dbo.HistoryPlayback', N'U') IS NULL
       BEGIN
-        CREATE TABLE [dbo].[HistoryEntry] (
-          [id] UNIQUEIDENTIFIER NOT NULL CONSTRAINT [HistoryEntry_id_df] DEFAULT NEWID(),
+        CREATE TABLE [dbo].[HistoryPlayback] (
+          [id] UNIQUEIDENTIFIER NOT NULL CONSTRAINT [HistoryPlayback_id_df] DEFAULT NEWID(),
+          [stageItemId] UNIQUEIDENTIFIER NULL,
           [stageCode] NVARCHAR(50) NOT NULL,
           [startTime] FLOAT NOT NULL,
           [endTime] FLOAT NOT NULL,
           [type] NVARCHAR(20) NOT NULL,
           [value] FLOAT NOT NULL,
-          [committed] BIT NOT NULL CONSTRAINT [HistoryEntry_committed_df] DEFAULT 0,
-          [createdAt] DATETIME2 NOT NULL CONSTRAINT [HistoryEntry_createdAt_df] DEFAULT SYSUTCDATETIME(),
-          [updatedAt] DATETIME2 NOT NULL CONSTRAINT [HistoryEntry_updatedAt_df] DEFAULT SYSUTCDATETIME(),
-          CONSTRAINT [HistoryEntry_pkey] PRIMARY KEY ([id])
+          [committed] BIT NOT NULL CONSTRAINT [HistoryPlayback_committed_df] DEFAULT 0,
+          [createdAt] DATETIME2 NOT NULL CONSTRAINT [HistoryPlayback_createdAt_df] DEFAULT SYSUTCDATETIME(),
+          [updatedAt] DATETIME2 NOT NULL CONSTRAINT [HistoryPlayback_updatedAt_df] DEFAULT SYSUTCDATETIME(),
+          CONSTRAINT [HistoryPlayback_pkey] PRIMARY KEY ([id])
         );
       END
 
-      IF COL_LENGTH('dbo.HistoryEntry', 'committed') IS NULL
+      IF COL_LENGTH('dbo.HistoryPlayback', 'committed') IS NULL
       BEGIN
-        ALTER TABLE [dbo].[HistoryEntry]
-        ADD [committed] BIT NOT NULL CONSTRAINT [HistoryEntry_committed_df] DEFAULT 0;
+        ALTER TABLE [dbo].[HistoryPlayback]
+        ADD [committed] BIT NOT NULL CONSTRAINT [HistoryPlayback_committed_df] DEFAULT 0;
+      END
+
+      IF COL_LENGTH('dbo.HistoryPlayback', 'stageItemId') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[HistoryPlayback]
+        ADD [stageItemId] UNIQUEIDENTIFIER NULL;
       END
 
       IF EXISTS (
         SELECT 1
         FROM sys.columns c
         INNER JOIN sys.types t ON c.user_type_id = t.user_type_id
-        WHERE c.object_id = OBJECT_ID(N'dbo.HistoryEntry')
+        WHERE c.object_id = OBJECT_ID(N'dbo.HistoryPlayback')
           AND c.name = 'startTime'
           AND t.name = 'int'
       )
@@ -239,22 +292,22 @@ export class HistoryService implements OnModuleInit {
         INNER JOIN sys.columns c
           ON dc.parent_object_id = c.object_id
          AND dc.parent_column_id = c.column_id
-        WHERE dc.parent_object_id = OBJECT_ID(N'dbo.HistoryEntry')
+        WHERE dc.parent_object_id = OBJECT_ID(N'dbo.HistoryPlayback')
           AND c.name = 'startTime';
 
         IF @startTimeConstraint IS NOT NULL
         BEGIN
-          EXEC('ALTER TABLE [dbo].[HistoryEntry] DROP CONSTRAINT [' + @startTimeConstraint + ']');
+          EXEC('ALTER TABLE [dbo].[HistoryPlayback] DROP CONSTRAINT [' + @startTimeConstraint + ']');
         END
 
-        ALTER TABLE [dbo].[HistoryEntry] ALTER COLUMN [startTime] FLOAT NOT NULL;
+        ALTER TABLE [dbo].[HistoryPlayback] ALTER COLUMN [startTime] FLOAT NOT NULL;
       END
 
       IF EXISTS (
         SELECT 1
         FROM sys.columns c
         INNER JOIN sys.types t ON c.user_type_id = t.user_type_id
-        WHERE c.object_id = OBJECT_ID(N'dbo.HistoryEntry')
+        WHERE c.object_id = OBJECT_ID(N'dbo.HistoryPlayback')
           AND c.name = 'endTime'
           AND t.name = 'int'
       )
@@ -265,15 +318,15 @@ export class HistoryService implements OnModuleInit {
         INNER JOIN sys.columns c
           ON dc.parent_object_id = c.object_id
          AND dc.parent_column_id = c.column_id
-        WHERE dc.parent_object_id = OBJECT_ID(N'dbo.HistoryEntry')
+        WHERE dc.parent_object_id = OBJECT_ID(N'dbo.HistoryPlayback')
           AND c.name = 'endTime';
 
         IF @endTimeConstraint IS NOT NULL
         BEGIN
-          EXEC('ALTER TABLE [dbo].[HistoryEntry] DROP CONSTRAINT [' + @endTimeConstraint + ']');
+          EXEC('ALTER TABLE [dbo].[HistoryPlayback] DROP CONSTRAINT [' + @endTimeConstraint + ']');
         END
 
-        ALTER TABLE [dbo].[HistoryEntry] ALTER COLUMN [endTime] FLOAT NOT NULL;
+        ALTER TABLE [dbo].[HistoryPlayback] ALTER COLUMN [endTime] FLOAT NOT NULL;
       END
     `);
   }

@@ -15,10 +15,16 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-export async function fetchHistory(stageCode?: string) {
+export async function fetchHistory(filters?: { stageItemId?: string; stageCode?: string }) {
   try {
     const { data } = await apiClient.get<{ items?: HistoryItem[] }>('/history', {
-      params: stageCode ? { stageCode } : undefined,
+      params:
+        filters?.stageItemId || filters?.stageCode
+          ? {
+              ...(filters.stageItemId ? { stageItemId: filters.stageItemId } : {}),
+              ...(filters.stageCode ? { stageCode: filters.stageCode } : {}),
+            }
+          : undefined,
     });
 
     return data.items ?? [];
@@ -28,6 +34,7 @@ export async function fetchHistory(stageCode?: string) {
 }
 
 export async function createHistory(payload: {
+  stageItemId?: string;
   stageCode: string;
   startTime: number;
   endTime: number;
@@ -50,10 +57,11 @@ export async function deleteHistory(id: string) {
   }
 }
 
-export async function commitHistory(stageCode: string) {
+export async function commitHistory(payload: { stageItemId?: string; stageCode?: string }) {
   try {
     const { data } = await apiClient.patch<{ items?: HistoryItem[] }>('/history/commit', {
-      stageCode,
+      ...(payload.stageItemId ? { stageItemId: payload.stageItemId } : {}),
+      ...(payload.stageCode ? { stageCode: payload.stageCode } : {}),
     });
 
     return data.items ?? [];

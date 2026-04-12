@@ -207,7 +207,7 @@ export class StageCategoryService implements OnModuleInit {
   private async ensureCategoryNotInUse(value: string) {
     const [stageCount, tableCtCount] = await Promise.all([
       this.prismaService.stageList.count({
-        where: { stage: value },
+        where: { area: value },
       }),
       this.prismaService.tableCT.count({
         where: { stage: value },

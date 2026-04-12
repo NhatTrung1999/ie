@@ -207,13 +207,18 @@ export function DashboardPage({
   }, [activeStage, dispatch, orderedStageItems, selectedItemId]);
 
   useEffect(() => {
-    if (!selectedItem?.code) {
+    if (!selectedItem?.id) {
       dispatch(setHistoryItems([]));
       return;
     }
 
-    void dispatch(loadHistoryItems(selectedItem.code));
-  }, [dispatch, selectedItem?.code]);
+    void dispatch(
+      loadHistoryItems({
+        stageItemId: selectedItem.id,
+        stageCode: selectedItem.code,
+      }),
+    );
+  }, [dispatch, selectedItem?.code, selectedItem?.id]);
 
   useEffect(() => {
     if (!hideCompletedStageItems || !activeLinkedItemId) {
@@ -231,6 +236,25 @@ export function DashboardPage({
     dispatch(setSelectedCtCell(null));
   }, [activeLinkedItemId, dispatch, hideCompletedStageItems, orderedStageItems]);
 
+  useEffect(() => {
+    const activeId = activeLinkedItemId ?? selectedItemId;
+
+    if (!activeId) {
+      return;
+    }
+
+    const itemStillVisible = filteredItems.some((item) => item.id === activeId);
+
+    if (itemStillVisible) {
+      return;
+    }
+
+    setActiveLinkedItemId(null);
+    dispatch(setSelectedItemId(''));
+    dispatch(setHistoryItems([]));
+    dispatch(setSelectedCtCell(null));
+  }, [activeLinkedItemId, dispatch, filteredItems, selectedItemId]);
+
   const handleRefreshTable = async () => {
     if (selectedItem) {
       await dispatch(
@@ -241,7 +265,12 @@ export function DashboardPage({
         }),
       );
 
-      await dispatch(loadHistoryItems(selectedItem.code));
+      await dispatch(
+        loadHistoryItems({
+          stageItemId: selectedItem.id,
+          stageCode: selectedItem.code,
+        }),
+      );
       return;
     }
 
@@ -321,7 +350,9 @@ export function DashboardPage({
 
   const handleUpload = async (payload: {
     date: string;
+    season: string;
     stageCode: string;
+    cutDie: string;
     area: StageKey;
     article: string;
     files: File[];
@@ -494,10 +525,11 @@ export function DashboardPage({
             onApply={setStageFilters}
             onReset={() =>
               setStageFilters({
-                keyword: '',
                 dateFrom: getTodayFilterDate(),
                 dateTo: getTodayFilterDate(),
+                season: '',
                 stage: '',
+                cutDie: '',
                 area: '',
                 article: '',
               })
@@ -546,10 +578,11 @@ function getFiltersFromSearchParams(searchParams: URLSearchParams): StageFilters
   const today = getTodayFilterDate();
 
   return {
-    keyword: searchParams.get('keyword') ?? '',
     dateFrom: searchParams.get('dateFrom') ?? today,
     dateTo: searchParams.get('dateTo') ?? today,
+    season: searchParams.get('season') ?? '',
     stage: searchParams.get('stage') ?? '',
+    cutDie: searchParams.get('cutDie') ?? '',
     area: searchParams.get('area') ?? '',
     article: searchParams.get('article') ?? '',
   };
@@ -571,10 +604,11 @@ function buildSearchParams(filters: StageFilters) {
 
 function areStageFiltersEqual(left: StageFilters, right: StageFilters) {
   return (
-    left.keyword === right.keyword &&
     left.dateFrom === right.dateFrom &&
     left.dateTo === right.dateTo &&
+    left.season === right.season &&
     left.stage === right.stage &&
+    left.cutDie === right.cutDie &&
     left.area === right.area &&
     left.article === right.article
   );

@@ -18,18 +18,21 @@ model User {
 }
 
 model StageList {
-  id        String   @id @default(dbgenerated("newid()")) @db.UniqueIdentifier
-  code      String   @db.NVarChar(50)
-  name      String   @db.NVarChar(255)
-  article   String?  @db.NVarChar(255)
-  duration  String   @db.NVarChar(20)
-  mood      String   @db.NVarChar(20)
-  stage     String   @db.NVarChar(50)
-  filePath  String?  @db.NVarChar(500)
+  id        String    @id @default(dbgenerated("newid()")) @db.UniqueIdentifier
+  code      String    @db.NVarChar(50)
+  name      String    @db.NVarChar(255)
+  season    String?   @db.NVarChar(100)
+  cutDie    String?   @db.NVarChar(100)
+  area      String?   @db.NVarChar(50)
+  article   String?   @db.NVarChar(255)
+  duration  String    @db.NVarChar(20)
+  mood      String    @db.NVarChar(20)
+  stage     String    @db.NVarChar(50)
+  filePath  String?   @db.NVarChar(500)
   stageDate DateTime? @db.Date
   sortOrder Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@map("StageList")
 }
@@ -99,6 +102,7 @@ model TableCT {
 
 model HistoryEntry {
   id          String   @id @default(dbgenerated("newid()")) @db.UniqueIdentifier
+  stageItemId String?  @db.UniqueIdentifier
   stageCode   String   @db.NVarChar(50)
   startTime   Float
   endTime     Float
@@ -108,12 +112,13 @@ model HistoryEntry {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@map("HistoryEntry")
+  @@map("HistoryPlayback")
 }
 
 model ControlSession {
   id           String   @id @default(dbgenerated("newid()")) @db.UniqueIdentifier
-  stageCode    String   @unique @db.NVarChar(50)
+  stageItemId  String?  @unique @db.UniqueIdentifier
+  stageCode    String   @db.NVarChar(50)
   elapsed      Float
   isRunning    Boolean
   segmentStart Float
@@ -123,5 +128,5 @@ model ControlSession {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@map("ControlSession")
+  @@map("ControlPanel")
 }

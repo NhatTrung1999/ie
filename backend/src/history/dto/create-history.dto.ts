@@ -1,4 +1,5 @@
 export type CreateHistoryDto = {
+  stageItemId?: string;
   stageCode: string;
   startTime: number;
   endTime: number;
