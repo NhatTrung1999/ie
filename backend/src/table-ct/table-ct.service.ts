@@ -537,74 +537,49 @@ export class TableCtService implements OnModuleInit {
       throw new NotFoundException('LSA template sheet is missing.');
     }
 
-    const mappedRows = orderedRows.map((row) => this.mapRow(row));
-    const computedStageTotalSeconds = roundToTwoDecimals(
-      mappedRows.reduce(
-        (sum, row) => sum + sumValues(row.nvaValues) + sumValues(row.vaValues),
-        0,
-      ),
+    const machineTypes = await this.prismaService.machineType.findMany({
+      where: {
+        isActive: true,
+        department: normalizedStage,
+      },
+    });
+    const lossRateByMachineType = new Map(
+      machineTypes.map((item) => [item.label, parseLossRate(item.loss ?? '')]),
     );
-    const stageTotalSeconds =
-      typeof payload.totalCtSeconds === 'number' && Number.isFinite(payload.totalCtSeconds)
-        ? payload.totalCtSeconds
-        : computedStageTotalSeconds;
+
+    const mappedRows = orderedRows.map((row) => this.mapRow(row));
     const estimateOutputPairs =
       typeof payload.estimateOutputPairs === 'number' && Number.isFinite(payload.estimateOutputPairs)
         ? payload.estimateOutputPairs
         : 0;
-    const taktTimeSeconds =
-      typeof payload.taktTimeSeconds === 'number' && Number.isFinite(payload.taktTimeSeconds)
-        ? payload.taktTimeSeconds
-        : estimateOutputPairs > 0
-          ? roundToTwoDecimals(3600 / estimateOutputPairs)
-          : 0;
-    const manpowerStandardLabor =
-      typeof payload.manpowerStandardLabor === 'number' &&
-      Number.isFinite(payload.manpowerStandardLabor)
-        ? payload.manpowerStandardLabor
-        : taktTimeSeconds > 0
-          ? Math.ceil(stageTotalSeconds / taktTimeSeconds)
-          : 0;
-    const capacityPerHour =
-      typeof payload.capacityPerHour === 'number' && Number.isFinite(payload.capacityPerHour)
-        ? payload.capacityPerHour
-        : stageTotalSeconds > 0
-          ? Math.round(3600 / stageTotalSeconds)
-          : 0;
     const workingTimeSeconds =
       typeof payload.workingTimeSeconds === 'number' && Number.isFinite(payload.workingTimeSeconds)
         ? payload.workingTimeSeconds
         : 27000;
+    const workingHours = roundToTwoDecimals(workingTimeSeconds / 3600);
 
     worksheet.getCell('B2').value =
       primaryStageItem?.article || primaryStageItem?.code || primaryRow.no;
-    worksheet.getCell('B3').value = '';
-    worksheet.getCell('B4').value = '';
+    worksheet.getCell('B3').value = primaryStageItem?.cutDie ?? '';
+    worksheet.getCell('B4').value =
+      primaryStageItem?.season ?? primaryStageItem?.area ?? normalizedStage;
     worksheet.getCell('B5').value = estimateOutputPairs;
-    worksheet.getCell('G3').value = `${mappedRows.length} Pairs`;
-    worksheet.getCell('G4').value = `${workingTimeSeconds} sec`;
-    worksheet.getCell('G5').value = `${taktTimeSeconds} sec`;
-
-    const summaryRowByStage: Record<string, number> = {
-      CUTTING: 2,
-      STITCHING: 3,
-      ASSEMBLY: 5,
-      STOCK: 6,
+    worksheet.getCell('G3').value = estimateOutputPairs;
+    worksheet.getCell('G4').value = '8 hours';
+    worksheet.getCell('G5').value = {
+      formula: estimateOutputPairs > 0 ? '3600/G3' : '0',
     };
-    const summaryRow = summaryRowByStage[normalizedStage] ?? 6;
 
-    worksheet.getCell(`P${summaryRow}`).value = stageTotalSeconds;
-    worksheet.getCell(`Q${summaryRow}`).value = manpowerStandardLabor;
-    worksheet.getCell(`R${summaryRow}`).value = capacityPerHour;
-    worksheet.getCell(`S${summaryRow}`).value = estimateOutputPairs;
-    worksheet.getCell(`T${summaryRow}`).value = '0%';
-    worksheet.getCell('P6').value = stageTotalSeconds;
-    worksheet.getCell('Q6').value = manpowerStandardLabor;
-    worksheet.getCell('R6').value = capacityPerHour;
-    worksheet.getCell('S6').value = estimateOutputPairs;
-    worksheet.getCell('T6').value = '0%';
-
-    populateLsaDetailSection(worksheet, mappedRows, category);
+    hideLsaColumnDisplayValues(worksheet, 'N');
+    ensureLsaVisibleTextColor(worksheet);
+    applyLsaWorkingTimeFormulas(worksheet, workingTimeSeconds, workingHours);
+    populateLsaDetailSection(
+      worksheet,
+      mappedRows,
+      normalizedStage,
+      lossRateByMachineType,
+      category,
+    );
 
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
@@ -1381,70 +1356,182 @@ function formatAverageNumber(values: number[], category?: string) {
 function populateLsaDetailSection(
   worksheet: ExcelJS.Worksheet,
   rows: ReturnType<TableCtService['mapRow']>[],
+  stage: string,
+  lossRateByMachineType: Map<string, number>,
   category?: string,
 ) {
-  const templateStart = 9;
-  const firstExtraRow = 10;
-  const blockHeight = 4;
-  const requiredRows = Math.max(1, rows.length) * blockHeight;
-  const currentRows = 4;
-  const extraRows = Math.max(0, requiredRows - currentRows);
+  void category;
 
-  if (extraRows > 0) {
-    worksheet.insertRows(13, Array.from({ length: extraRows }, () => []), 'i');
+  const section = LSA_TEMPLATE_SECTION_BY_STAGE[stage];
+  if (!section) {
+    throw new BadRequestException(`Unsupported LSA stage "${stage}".`);
+  }
+
+  const capacity = section.endRow - section.startRow + 1;
+  if (rows.length > capacity) {
+    throw new BadRequestException(
+      `The ${stage} LSA template supports up to ${capacity} rows, but ${rows.length} rows were selected.`,
+    );
+  }
+
+  for (const templateSection of LSA_TEMPLATE_SECTIONS) {
+    for (
+      let rowNumber = templateSection.startRow;
+      rowNumber <= templateSection.endRow;
+      rowNumber += 1
+    ) {
+      clearLsaInputRow(worksheet, rowNumber);
+    }
   }
 
   for (let index = 0; index < rows.length; index += 1) {
-    const baseRow = templateStart + index * blockHeight;
-    const sourceRows = [9, 10, 11, 12];
-    const targetRows = [baseRow, baseRow + 1, baseRow + 2, baseRow + 3];
-
-    targetRows.forEach((targetRow, sourceIndex) => {
-      copyRowStyle(worksheet, sourceRows[sourceIndex], targetRow);
-    });
-
-    const row = rows[index];
-    const va = roundToTwoDecimals(sumValues(row.vaValues));
-    const nva = roundToTwoDecimals(sumValues(row.nvaValues));
-    const loss = 0;
-    const totalValues = row.nvaValues.map((value, ctIndex) =>
-      roundToTwoDecimals(value + (row.vaValues[ctIndex] ?? 0)),
+    fillLsaInputRow(
+      worksheet,
+      section.startRow + index,
+      rows[index],
+      lossRateByMachineType,
     );
-    const ct = formatAverageNumber(totalValues, category);
-    const pph = ct > 0 ? Math.round(3600 / ct) : 0;
-    const pair = ct > 0 ? roundToTwoDecimals((8 * 3600) / ct) : 0;
+  }
+}
 
-    worksheet.getCell(`A${baseRow}`).value = row.no;
-    worksheet.getCell(`B${baseRow}`).value = row.partName;
-    worksheet.getCell(`C${baseRow}`).value = va;
-    worksheet.getCell(`D${baseRow}`).value = nva;
-    worksheet.getCell(`E${baseRow}`).value = loss;
-    worksheet.getCell(`F${baseRow}`).value = ct;
-    worksheet.getCell(`G${baseRow}`).value = 0;
-    worksheet.getCell(`H${baseRow}`).value = 0;
-    worksheet.getCell(`I${baseRow}`).value = 0;
-    worksheet.getCell(`J${baseRow}`).value = '';
-    worksheet.getCell(`K${baseRow}`).value = pph;
-    worksheet.getCell(`L${baseRow}`).value = 0;
-    worksheet.getCell(`M${baseRow}`).value = '';
+const LSA_TEMPLATE_SECTIONS = [
+  { startRow: 9, endRow: 34 },
+  { startRow: 38, endRow: 85 },
+  { startRow: 89, endRow: 122 },
+];
 
-    worksheet.getCell(`B${baseRow + 1}`).value = `VA ${row.partName}`.trim();
-    worksheet.getCell(`C${baseRow + 1}`).value = va;
-    worksheet.getCell(`F${baseRow + 1}`).value = ct;
-    worksheet.getCell(`G${baseRow + 1}`).value = 'CT';
-    worksheet.getCell(`I${baseRow + 1}`).value = 0;
-    worksheet.getCell(`L${baseRow + 1}`).value = 0;
+const LSA_TEMPLATE_SECTION_BY_STAGE: Record<string, { startRow: number; endRow: number }> = {
+  CUTTING: LSA_TEMPLATE_SECTIONS[0],
+  STITCHING: LSA_TEMPLATE_SECTIONS[1],
+  ASSEMBLY: LSA_TEMPLATE_SECTIONS[2],
+  STOCK: LSA_TEMPLATE_SECTIONS[2],
+};
 
-    worksheet.getCell(`F${baseRow + 2}`).value = pair;
-    worksheet.getCell(`G${baseRow + 2}`).value = 'PP';
+function applyLsaWorkingTimeFormulas(
+  worksheet: ExcelJS.Worksheet,
+  workingTimeSeconds: number,
+  workingHours: number,
+) {
+  worksheet.getCell('B5').value = {
+    formula: workingHours > 0 ? `F126/${workingHours}` : '0',
+  };
+  worksheet.getCell('Q2').value = { formula: `ROUND(${workingTimeSeconds}/P2,1)` };
+  worksheet.getCell('Q3').value = { formula: `ROUND(${workingTimeSeconds}/P3,1)` };
+  worksheet.getCell('Q4').value = { formula: `ROUND(${workingTimeSeconds}/P4,1)` };
+  worksheet.getCell('Q5').value = { formula: `ROUND(${workingTimeSeconds}/P5,1)` };
+  worksheet.getCell('Q6').value = { formula: `ROUND(${workingTimeSeconds}/P6,1)` };
+  worksheet.getCell('F36').value = { formula: `ROUND(${workingTimeSeconds}/F35,1)` };
+  worksheet.getCell('F87').value = { formula: `ROUND(${workingTimeSeconds}/F86,1)` };
+  worksheet.getCell('F124').value = { formula: `ROUND(${workingTimeSeconds}/F123,1)` };
+  worksheet.getCell('F126').value = { formula: `ROUND(${workingTimeSeconds}/F125,1)` };
+}
 
-    worksheet.getCell(`B${baseRow + 3}`).value = `TỔNG ${row.partName}`.trim();
-    worksheet.getCell(`C${baseRow + 3}`).value = va;
-    worksheet.getCell(`F${baseRow + 3}`).value = ct;
-    worksheet.getCell(`G${baseRow + 3}`).value = 'Total';
-    worksheet.getCell(`I${baseRow + 3}`).value = 0;
-    worksheet.getCell(`J${baseRow + 3}`).value = 0;
-    worksheet.getCell(`L${baseRow + 3}`).value = 0;
+function hideLsaColumnDisplayValues(worksheet: ExcelJS.Worksheet, columnKey: string) {
+  const column = worksheet.getColumn(columnKey);
+  column.hidden = false;
+
+  column.eachCell({ includeEmpty: false }, (cell) => {
+    cell.numFmt = ';;;';
+  });
+}
+
+function ensureLsaVisibleTextColor(worksheet: ExcelJS.Worksheet) {
+  const sectionHeaderRows = new Set([8, 37, 88]);
+
+  for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+    for (let colNumber = 1; colNumber <= worksheet.columnCount; colNumber += 1) {
+      const cell = worksheet.getCell(rowNumber, colNumber);
+      if (cell.value == null || cell.value === '') {
+        continue;
+      }
+
+      if (sectionHeaderRows.has(rowNumber)) {
+        continue;
+      }
+
+      if (
+        typeof cell.value === 'object' &&
+        cell.value != null &&
+        'richText' in cell.value &&
+        Array.isArray(cell.value.richText)
+      ) {
+        cell.value = {
+          richText: cell.value.richText.map((part) => ({
+            ...part,
+            font:
+              !part.font?.color || 'indexed' in part.font.color
+                ? {
+                    ...part.font,
+                    color: { argb: 'FF000000' },
+                  }
+                : part.font,
+          })),
+        };
+      }
+
+      if (!cell.font?.color || 'indexed' in cell.font.color) {
+        cell.font = {
+          ...cell.font,
+          color: { argb: 'FF000000' },
+        };
+      }
+    }
+  }
+}
+
+function clearLsaInputRow(worksheet: ExcelJS.Worksheet, rowNumber: number) {
+  worksheet.getCell(`A${rowNumber}`).value = '';
+  worksheet.getCell(`B${rowNumber}`).value = '';
+  worksheet.getCell(`C${rowNumber}`).value = 0;
+  worksheet.getCell(`D${rowNumber}`).value = 0;
+  worksheet.getCell(`E${rowNumber}`).value = 0;
+  worksheet.getCell(`J${rowNumber}`).value = '';
+  worksheet.getCell(`M${rowNumber}`).value = '';
+  ensureLsaInputRowBorders(worksheet, rowNumber);
+}
+
+function fillLsaInputRow(
+  worksheet: ExcelJS.Worksheet,
+  rowNumber: number,
+  row: ReturnType<TableCtService['mapRow']>,
+  lossRateByMachineType: Map<string, number>,
+) {
+  const lossRate = lossRateByMachineType.get(row.machineType) ?? 0;
+
+  worksheet.getCell(`A${rowNumber}`).value = row.no;
+  worksheet.getCell(`B${rowNumber}`).value = row.partName;
+  worksheet.getCell(`C${rowNumber}`).value = roundToTwoDecimals(sumValues(row.vaValues));
+  worksheet.getCell(`D${rowNumber}`).value = roundToTwoDecimals(sumValues(row.nvaValues));
+  worksheet.getCell(`E${rowNumber}`).value = roundToTwoDecimals(lossRate);
+  worksheet.getCell(`J${rowNumber}`).value = '';
+  worksheet.getCell(`M${rowNumber}`).value =
+    row.machineType === 'Select..' ? '' : row.machineType;
+  ensureLsaInputRowBorders(worksheet, rowNumber);
+}
+
+function parseLossRate(value?: string) {
+  if (!value) {
+    return 0;
+  }
+
+  const normalized = value.trim().replace('%', '');
+  const parsed = Number(normalized);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+
+  return parsed > 1 ? parsed / 100 : parsed;
+}
+
+function ensureLsaInputRowBorders(worksheet: ExcelJS.Worksheet, rowNumber: number) {
+  for (let colNumber = 1; colNumber <= 13; colNumber += 1) {
+    worksheet.getCell(rowNumber, colNumber).border = {
+      left: { style: 'thin', color: { argb: 'FF000000' } },
+      right: { style: 'thin', color: { argb: 'FF000000' } },
+      top: { style: 'thin', color: { argb: 'FF000000' } },
+      bottom: { style: 'thin', color: { argb: 'FF000000' } },
+    };
   }
 }
 
