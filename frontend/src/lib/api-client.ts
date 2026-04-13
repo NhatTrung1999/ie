@@ -2,7 +2,7 @@ import axios from 'axios';
 
 import { getStoredToken } from '@/lib/storage';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://192.168.18.42:3001/api';
 export const UNAUTHORIZED_EVENT = 'ie-auth-unauthorized';
 
 export const apiClient = axios.create({

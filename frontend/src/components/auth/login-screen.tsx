@@ -69,9 +69,6 @@ export function LoginScreen({ onSignIn }: LoginScreenProps) {
             <Video className="h-5 w-5" />
           </span>
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.24em] text-slate-400">
-              IE Platform
-            </div>
             <div className="text-lg font-semibold tracking-tight text-slate-800">
               IE Video CT
             </div>
