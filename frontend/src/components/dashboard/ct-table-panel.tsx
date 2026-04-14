@@ -1,4 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   Check,
   CheckCheck,
@@ -30,7 +44,7 @@ import {
   toggleTableRowConfirm,
   updateTableRowMachineType,
 } from '@/store/slices/dashboard-slice';
-import type { CtRow } from '@/types/dashboard';
+import type { CtRow, SelectedCtCell } from '@/types/dashboard';
 
 const CT_COLUMNS = [
   'CT1',
@@ -53,6 +67,375 @@ type CtTablePanelProps = {
   onToggleStageItemActive: (stageItemId: string | null) => void;
 };
 
+type SortableCtRowGroupProps = {
+  row: CtRow;
+  isActive: boolean;
+  isDragging: boolean;
+  machineTypeOptions: MachineTypeItem[];
+  machineTypeQueries: Record<string, string>;
+  openMachineDropdownId: string | null;
+  selectedCtCell: SelectedCtCell | null;
+  sessionCategory?: string;
+  dispatch: ReturnType<typeof useAppDispatch>;
+  onSelectRow: (row: CtRow) => void;
+  onToggleStageItemActive: (stageItemId: string | null) => void;
+  onSetMachineDropdown: Dispatch<SetStateAction<string | null>>;
+  onSetMachineQueries: Dispatch<SetStateAction<Record<string, string>>>;
+  onMachineTypeQueryChange: (row: CtRow, query: string) => void;
+  onMachineTypeQueryBlur: (row: CtRow) => void;
+  onMachineTypeSelect: (id: string, value: string) => Promise<void>;
+  onConfirm: (id: string, confirmed: boolean) => Promise<void>;
+  onDone: (id: string) => Promise<void>;
+  onDelete: (row: CtRow) => Promise<void>;
+};
+
+function SortableCtRowGroup({
+  row,
+  isActive,
+  isDragging,
+  machineTypeOptions,
+  machineTypeQueries,
+  openMachineDropdownId,
+  selectedCtCell,
+  sessionCategory,
+  dispatch,
+  onSelectRow,
+  onToggleStageItemActive,
+  onSetMachineDropdown,
+  onSetMachineQueries,
+  onMachineTypeQueryChange,
+  onMachineTypeQueryBlur,
+  onMachineTypeSelect,
+  onConfirm,
+  onDone,
+  onDelete,
+}: SortableCtRowGroupProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging: sortableDragging,
+  } = useSortable({ id: row.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: sortableDragging ? 'none' : transition,
+  };
+
+  return (
+    <tbody
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'transform-gpu will-change-transform',
+        sortableDragging || isDragging ? 'relative z-10' : '',
+      )}
+    >
+      {['NVA', 'VA'].map((type, idx) => (
+        <tr
+          key={`${row.no}-${type}`}
+          onClick={() => onSelectRow(row)}
+          className={cn(
+            'cursor-pointer border-b border-gray-50 transition-all',
+            isActive
+              ? 'bg-linear-to-r from-blue-50/60 to-violet-50/60'
+              : 'hover:bg-gray-50/60',
+            sortableDragging || isDragging
+              ? 'bg-white opacity-80 shadow-[0_8px_24px_rgba(15,23,42,0.08)]'
+              : '',
+          )}
+        >
+          {idx === 0 ? (
+            <td rowSpan={2} className="w-6 align-middle text-center">
+              <button
+                type="button"
+                title="Drag to reorder"
+                {...attributes}
+                {...listeners}
+                onClick={(e) => e.stopPropagation()}
+                className="rounded-md p-0.5 touch-none"
+              >
+                <GripVertical className="mx-auto h-3 w-3 cursor-grab text-gray-300 active:cursor-grabbing" />
+              </button>
+            </td>
+          ) : null}
+
+          {idx === 0 ? (
+            <td rowSpan={2} className="w-10 py-1.5 align-middle text-center">
+              <span
+                className={cn(
+                  'text-xs font-bold',
+                  isActive ? 'text-blue-600' : 'text-gray-600',
+                )}
+              >
+                {row.no}
+              </span>
+            </td>
+          ) : null}
+
+          {idx === 0 ? (
+            <td rowSpan={2} className="w-36 py-1.5 align-middle text-center">
+              <span className="text-xs text-gray-500">{row.partName}</span>
+            </td>
+          ) : null}
+
+          <td className="w-14 py-1.5 align-middle text-center">
+            <div className="flex justify-center">
+              {type === 'NVA' ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-500">
+                  <span className="h-1 w-1 rounded-full bg-red-400" />
+                  NVA
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                  <span className="h-1 w-1 rounded-full bg-emerald-400" />
+                  VA
+                </span>
+              )}
+            </div>
+          </td>
+
+          {(type === 'NVA' ? row.nvaValues : row.vaValues).map((value, ctIdx) => (
+            <td key={ctIdx} className="w-10 py-1.5 align-middle text-center">
+              <button
+                type="button"
+                disabled={row.confirmed}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (row.confirmed) {
+                    return;
+                  }
+                  const isSelected =
+                    selectedCtCell?.rowId === row.id &&
+                    selectedCtCell.columnIndex === ctIdx;
+
+                  if (isSelected) {
+                    dispatch(setSelectedCtCell(null));
+                    onToggleStageItemActive(null);
+                    return;
+                  }
+
+                  dispatch(
+                    setSelectedCtCell({
+                      rowId: row.id,
+                      stageItemId: row.stageItemId ?? null,
+                      rowNo: row.no,
+                      columnIndex: ctIdx,
+                      columnKey: CT_COLUMNS[ctIdx],
+                    }),
+                  );
+                  onToggleStageItemActive(row.stageItemId ?? null);
+                }}
+                className={cn(
+                  'inline-flex min-w-8 items-center justify-center rounded-md px-1 py-0.5 text-xs font-mono transition-colors',
+                  isActive && ctIdx === 0 ? 'font-bold text-amber-500' : 'text-gray-400',
+                  row.confirmed
+                    ? 'cursor-not-allowed opacity-60 hover:bg-transparent'
+                    : '',
+                  selectedCtCell?.rowId === row.id &&
+                    selectedCtCell.columnIndex === ctIdx
+                    ? 'bg-blue-100 font-bold text-blue-700 ring-1 ring-blue-300'
+                    : row.confirmed
+                      ? ''
+                      : 'hover:bg-gray-100',
+                )}
+              >
+                {formatMetricValue(value)}
+              </button>
+            </td>
+          ))}
+
+          <td className="w-14 py-1.5 align-middle text-center">
+            <span className="text-xs font-mono text-gray-400">
+              {formatAverage(
+                type === 'NVA' ? row.nvaValues : row.vaValues,
+                row.done,
+                sessionCategory,
+              )}
+            </span>
+          </td>
+
+          {idx === 0 ? (
+            <td rowSpan={2} className="w-36 py-1.5 align-middle text-center">
+              <div className="flex justify-center">
+                <div className="relative w-32">
+                  <button
+                    type="button"
+                    disabled={row.confirmed}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSetMachineDropdown((current) =>
+                        current === row.id ? null : row.id,
+                      );
+                      onSetMachineQueries((current) => ({
+                        ...current,
+                        [row.id]: '',
+                      }));
+                    }}
+                    className={cn(
+                      'flex h-7 w-full items-center justify-between rounded-lg border px-3 text-[11px] outline-none transition-all',
+                      row.confirmed
+                        ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-300'
+                        : row.machineType !== 'Select..'
+                          ? 'border-blue-200 bg-blue-50 font-medium text-blue-600'
+                          : 'border-gray-200 bg-gray-50 text-gray-400',
+                    )}
+                  >
+                    <span className="truncate">
+                      {getMachineTypeDisplay(row.machineType, machineTypeOptions) || 'Select...'}
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                  </button>
+
+                  {openMachineDropdownId === row.id && !row.confirmed ? (
+                    <div
+                      className="absolute left-0 top-[calc(100%+0.25rem)] z-20 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.16)]"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        autoFocus
+                        value={machineTypeQueries[row.id] ?? ''}
+                        onChange={(e) =>
+                          onMachineTypeQueryChange(row, e.target.value)
+                        }
+                        onBlur={() => {
+                          onMachineTypeQueryBlur(row);
+                          setTimeout(() => {
+                            onSetMachineDropdown((current) =>
+                              current === row.id ? null : current,
+                            );
+                          }, 120);
+                        }}
+                        placeholder="Search..."
+                        className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                      />
+                      <div className="mt-2 max-h-44 overflow-y-auto">
+                        {getFilteredMachineTypes(row, machineTypeQueries, machineTypeOptions).length === 0 ? (
+                          <div className="px-2 py-2 text-[11px] text-slate-400">
+                            No data
+                          </div>
+                        ) : (
+                          getFilteredMachineTypes(
+                            row,
+                            machineTypeQueries,
+                            machineTypeOptions,
+                          ).map((machine) => (
+                            <button
+                              key={machine.id}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                void onMachineTypeSelect(row.id, machine.label);
+                                onSetMachineQueries((current) => {
+                                  const next = { ...current };
+                                  delete next[row.id];
+                                  return next;
+                                });
+                                onSetMachineDropdown(null);
+                              }}
+                              className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-[11px] text-slate-700 transition hover:bg-slate-100"
+                            >
+                              <span className="truncate">
+                                {formatMachineTypeOption(machine)}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </td>
+          ) : null}
+
+          {idx === 0 ? (
+            <td rowSpan={2} className="w-16 py-1.5 align-middle text-center">
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void onConfirm(row.id, row.confirmed);
+                  }}
+                  title={row.confirmed ? 'Unconfirm row' : 'Confirm row'}
+                  className={cn(
+                    'flex h-5 w-5 items-center justify-center rounded-md border-2 transition-all',
+                    row.confirmed
+                      ? 'border-blue-500 bg-blue-500'
+                      : 'border-gray-300 bg-white hover:border-blue-400',
+                  )}
+                >
+                  {row.confirmed ? <CheckCheck className="h-3 w-3 text-white" /> : null}
+                </button>
+              </div>
+            </td>
+          ) : null}
+
+          {idx === 0 ? (
+            <td
+              rowSpan={2}
+              className="w-16 py-1.5 align-middle text-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-center gap-1.5">
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void onDone(row.id);
+                  }}
+                  disabled={row.confirmed}
+                  title={row.done ? 'Mark as not done' : 'Mark row as done'}
+                  className={cn(
+                    'h-6 rounded-lg border px-2 text-[10px] font-bold shadow-none',
+                    row.confirmed
+                      ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-300'
+                      : row.done
+                        ? 'border-emerald-500 bg-emerald-500 text-white hover:bg-emerald-600'
+                        : 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100',
+                  )}
+                >
+                  <Check className="h-3 w-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    void onDelete(row);
+                  }}
+                  disabled={row.confirmed}
+                  title={
+                    row.confirmed
+                      ? 'Confirmed rows cannot be deleted.'
+                      : 'Delete table row'
+                  }
+                  className={cn(
+                    'h-6 rounded-lg border px-2 text-[10px] font-bold shadow-none',
+                    row.confirmed
+                      ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-300'
+                      : 'border-red-200 bg-red-50 text-red-500 hover:bg-red-100',
+                  )}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            </td>
+          ) : null}
+        </tr>
+      ))}
+    </tbody>
+  );
+}
+
 export function CtTablePanel({
   rows,
   activeStageItemId,
@@ -61,16 +444,16 @@ export function CtTablePanel({
   onToggleStageItemActive,
 }: CtTablePanelProps) {
   const dispatch = useAppDispatch();
-  const { tableRowsError, activeStage, selectedCtCell, sessionCategory } =
-    useAppSelector((state) => ({
-      tableRowsError: state.dashboard.tableRowsError,
-      activeStage: state.dashboard.activeStage,
-      selectedCtCell: state.dashboard.selectedCtCell,
-      sessionCategory: state.auth.sessionUser.category,
-    }));
-  const [draggingNo, setDraggingNo] = useState<string | null>(null);
-  const [dragOverNo, setDragOverNo] = useState<string | null>(null);
-  const tableBodyRef = useRef<HTMLTableSectionElement | null>(null);
+  const tableRowsError = useAppSelector((state) => state.dashboard.tableRowsError);
+  const activeStage = useAppSelector((state) => state.dashboard.activeStage);
+  const selectedCtCell = useAppSelector((state) => state.dashboard.selectedCtCell);
+  const sessionCategory = useAppSelector((state) => state.auth.sessionUser.category);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 4 },
+    }),
+  );
+  const [activeDragRowId, setActiveDragRowId] = useState<string | null>(null);
   const [machineTypes, setMachineTypes] = useState<MachineTypeItem[]>([]);
   const [machineTypeQueries, setMachineTypeQueries] = useState<
     Record<string, string>
@@ -102,6 +485,10 @@ export function CtTablePanel({
   }, [activeStage]);
 
   const machineTypeOptions = useMemo(() => machineTypes, [machineTypes]);
+  const rowById = useMemo(
+    () => new Map(rows.map((row) => [row.id, row])),
+    [rows],
+  );
 
   const handleToggleRowSelection = (row: CtRow) => {
     const isDeselecting = activeStageItemId === (row.stageItemId ?? null);
@@ -175,24 +562,6 @@ export function CtTablePanel({
       const next = { ...current };
       delete next[row.id];
       return next;
-    });
-  };
-
-  const getFilteredMachineTypes = (row: CtRow) => {
-    const query = (machineTypeQueries[row.id] ?? '').trim().toLowerCase();
-
-    if (!query) {
-      return machineTypeOptions;
-    }
-
-    return machineTypeOptions.filter((machine) => {
-      const displayValue = formatMachineTypeOption(machine).toLowerCase();
-      return (
-        displayValue.includes(query) ||
-        machine.label.toLowerCase().includes(query) ||
-        machine.labelCn?.toLowerCase().includes(query) ||
-        machine.labelVn?.toLowerCase().includes(query)
-      );
     });
   };
 
@@ -379,6 +748,23 @@ export function CtTablePanel({
     setLsaExportError('');
   };
 
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    setActiveDragRowId(null);
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const activeRow = rowById.get(String(active.id));
+    const overRow = rowById.get(String(over.id));
+
+    if (!activeRow || !overRow || activeRow.no === overRow.no) {
+      return;
+    }
+
+    onReorder(activeRow.no, overRow.no);
+  };
+
   return (
     <>
       <div className="flex min-h-90 flex-col overflow-hidden border-t border-gray-200 bg-white lg:h-[38%] lg:min-h-0">
@@ -484,34 +870,8 @@ export function CtTablePanel({
               </tr>
             </thead>
 
-            <tbody
-              ref={tableBodyRef}
-              onDragOver={(e) => {
-                if (!draggingNo || !tableBodyRef.current) {
-                  return;
-                }
-
-                const nearestNo = getNearestTableRowNo(tableBodyRef.current, e.clientY);
-
-                if (!nearestNo || nearestNo === draggingNo) {
-                  return;
-                }
-
-                e.preventDefault();
-                setDragOverNo(nearestNo);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-
-                if (draggingNo && dragOverNo && draggingNo !== dragOverNo) {
-                  onReorder(draggingNo, dragOverNo);
-                }
-
-                setDraggingNo(null);
-                setDragOverNo(null);
-              }}
-            >
-              {rows.length === 0 ? (
+            {rows.length === 0 ? (
+              <tbody>
                 <tr>
                   <td
                     colSpan={CT_COLUMNS.length + 9}
@@ -525,376 +885,46 @@ export function CtTablePanel({
                     </div>
                   </td>
                 </tr>
-              ) : (
-                rows.map((row) =>
-                  ['NVA', 'VA'].map((type, idx) => (
-                    <tr
-                      key={`${row.no}-${type}`}
-                      data-drag-row={idx === 0 ? row.no : undefined}
-                      onClick={() => handleToggleRowSelection(row)}
-                      draggable={idx === 0}
-                      onDragStart={(e) => {
-                        if (idx !== 0) {
-                          e.preventDefault();
-                          return;
-                        }
-
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('text/plain', row.id);
-                        setDraggingNo(row.no);
-                      }}
-                      onDragEnd={() => {
-                        setDraggingNo(null);
-                        setDragOverNo(null);
-                      }}
-                      onDragOver={(e) => {
-                        if (idx === 0 && draggingNo && draggingNo !== row.no) {
-                          e.preventDefault();
-                          setDragOverNo(row.no);
-                        }
-                      }}
-                      onDragLeave={() => {
-                        if (dragOverNo === row.no) {
-                          setDragOverNo(null);
-                        }
-                      }}
-                      className={cn(
-                        'cursor-pointer border-b border-gray-50 transition-all',
-                        activeRowStageItemId === (row.stageItemId ?? null)
-                          ? 'bg-linear-to-r from-blue-50/60 to-violet-50/60'
-                          : 'hover:bg-gray-50/60',
-                        draggingNo === row.no ? 'opacity-60' : '',
-                        dragOverNo === row.no && draggingNo !== row.no
-                          ? 'bg-blue-50/70'
-                          : ''
-                      )}
-                    >
-                      {idx === 0 ? (
-                        <td
-                          rowSpan={2}
-                          className="relative w-6 align-middle text-center"
-                        >
-                          {dragOverNo === row.no && draggingNo !== row.no ? (
-                            <div className="absolute inset-x-0 top-0 h-0.5 rounded-full bg-blue-400" />
-                          ) : null}
-                          <button
-                            type="button"
-                            title="Drag to reorder"
-                            onClick={(e) => e.stopPropagation()}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            className="rounded-md p-0.5"
-                          >
-                            <GripVertical className="mx-auto h-3 w-3 cursor-grab text-gray-300 active:cursor-grabbing" />
-                          </button>
-                        </td>
-                      ) : null}
-
-                      {idx === 0 ? (
-                        <td
-                          rowSpan={2}
-                          className="w-10 py-1.5 align-middle text-center"
-                        >
-                          <span
-                            className={cn(
-                              'text-xs font-bold',
-                              activeRowStageItemId === (row.stageItemId ?? null)
-                                ? 'text-blue-600'
-                                : 'text-gray-600'
-                            )}
-                          >
-                            {row.no}
-                          </span>
-                        </td>
-                      ) : null}
-
-                      {idx === 0 ? (
-                        <td
-                          rowSpan={2}
-                          className="w-36 py-1.5 align-middle text-center"
-                        >
-                          <span className="text-xs text-gray-500">
-                            {row.partName}
-                          </span>
-                        </td>
-                      ) : null}
-
-                      <td className="w-14 py-1.5 align-middle text-center">
-                        <div className="flex justify-center">
-                          {type === 'NVA' ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-500">
-                              <span className="h-1 w-1 rounded-full bg-red-400" />
-                              NVA
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
-                              <span className="h-1 w-1 rounded-full bg-emerald-400" />
-                              VA
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {(type === 'NVA' ? row.nvaValues : row.vaValues).map(
-                        (value, ctIdx) => (
-                          <td
-                            key={ctIdx}
-                            className="w-10 py-1.5 align-middle text-center"
-                          >
-                            <button
-                              type="button"
-                              disabled={row.confirmed}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                if (row.confirmed) {
-                                  return;
-                                }
-                                const isSelected =
-                                  selectedCtCell?.rowId === row.id &&
-                                  selectedCtCell.columnIndex === ctIdx;
-
-                                if (isSelected) {
-                                  dispatch(setSelectedCtCell(null));
-                                  onToggleStageItemActive(null);
-                                  return;
-                                }
-
-                                dispatch(
-                                  setSelectedCtCell({
-                                    rowId: row.id,
-                                    stageItemId: row.stageItemId ?? null,
-                                    rowNo: row.no,
-                                    columnIndex: ctIdx,
-                                    columnKey: CT_COLUMNS[ctIdx],
-                                  })
-                                );
-                                onToggleStageItemActive(
-                                  row.stageItemId ?? null
-                                );
-                              }}
-                              className={cn(
-                                'inline-flex min-w-8 items-center justify-center rounded-md px-1 py-0.5 text-xs font-mono transition-colors',
-                                activeRowStageItemId ===
-                                  (row.stageItemId ?? null) && ctIdx === 0
-                                  ? 'font-bold text-amber-500'
-                                  : 'text-gray-400',
-                                row.confirmed
-                                  ? 'cursor-not-allowed opacity-60 hover:bg-transparent'
-                                  : '',
-                                selectedCtCell?.rowId === row.id &&
-                                  selectedCtCell.columnIndex === ctIdx
-                                  ? 'bg-blue-100 font-bold text-blue-700 ring-1 ring-blue-300'
-                                  : row.confirmed
-                                  ? ''
-                                  : 'hover:bg-gray-100'
-                              )}
-                            >
-                              {formatMetricValue(value)}
-                            </button>
-                          </td>
-                        )
-                      )}
-
-                      <td className="w-14 py-1.5 align-middle text-center">
-                        <span className="text-xs font-mono text-gray-400">
-                          {formatAverage(
-                            type === 'NVA' ? row.nvaValues : row.vaValues,
-                            row.done,
-                            sessionCategory
-                          )}
-                        </span>
-                      </td>
-
-                      {idx === 0 ? (
-                        <td
-                          rowSpan={2}
-                          className="w-36 py-1.5 align-middle text-center"
-                        >
-                          <div className="flex justify-center">
-                            <div className="relative w-32">
-                              <button
-                                type="button"
-                                disabled={row.confirmed}
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOpenMachineDropdownId((current) =>
-                                    current === row.id ? null : row.id,
-                                  );
-                                  setMachineTypeQueries((current) => ({
-                                    ...current,
-                                    [row.id]: '',
-                                  }));
-                                }}
-                                className={cn(
-                                  'flex h-7 w-full items-center justify-between rounded-lg border px-3 text-[11px] outline-none transition-all',
-                                  row.confirmed
-                                    ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-300'
-                                    : row.machineType !== 'Select..'
-                                    ? 'border-blue-200 bg-blue-50 font-medium text-blue-600'
-                                    : 'border-gray-200 bg-gray-50 text-gray-400',
-                                )}
-                              >
-                                <span className="truncate">
-                                  {getMachineTypeDisplay(
-                                    row.machineType,
-                                    machineTypeOptions,
-                                  ) || 'Select...'}
-                                </span>
-                                <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                              </button>
-
-                              {openMachineDropdownId === row.id && !row.confirmed ? (
-                                <div
-                                  className="absolute left-0 top-[calc(100%+0.25rem)] z-20 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.16)]"
-                                  onMouseDown={(e) => e.stopPropagation()}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <input
-                                    autoFocus
-                                    value={machineTypeQueries[row.id] ?? ''}
-                                    onChange={(e) =>
-                                      handleMachineTypeQueryChange(row, e.target.value)
-                                    }
-                                    onBlur={() => {
-                                      handleMachineTypeQueryBlur(row);
-                                      setTimeout(() => {
-                                        setOpenMachineDropdownId((current) =>
-                                          current === row.id ? null : current,
-                                        );
-                                      }, 120);
-                                    }}
-                                    placeholder="Search..."
-                                    className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-[11px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-                                  />
-                                  <div className="mt-2 max-h-44 overflow-y-auto">
-                                    {getFilteredMachineTypes(row).length === 0 ? (
-                                      <div className="px-2 py-2 text-[11px] text-slate-400">
-                                        No data
-                                      </div>
-                                    ) : (
-                                      getFilteredMachineTypes(row).map((machine) => (
-                                        <button
-                                          key={machine.id}
-                                          type="button"
-                                          onMouseDown={(e) => e.preventDefault()}
-                                          onClick={() => {
-                                            void handleMachineType(row.id, machine.label);
-                                            setMachineTypeQueries((current) => {
-                                              const next = { ...current };
-                                              delete next[row.id];
-                                              return next;
-                                            });
-                                            setOpenMachineDropdownId(null);
-                                          }}
-                                          className="flex w-full items-center rounded-lg px-2 py-1.5 text-left text-[11px] text-slate-700 transition hover:bg-slate-100"
-                                        >
-                                          <span className="truncate">
-                                            {formatMachineTypeOption(machine)}
-                                          </span>
-                                        </button>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        </td>
-                      ) : null}
-
-                      {idx === 0 ? (
-                        <td
-                          rowSpan={2}
-                          className="w-16 py-1.5 align-middle text-center"
-                        >
-                          <div className="flex justify-center">
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleConfirm(row.id, row.confirmed);
-                              }}
-                              title={
-                                row.confirmed ? 'Unconfirm row' : 'Confirm row'
-                              }
-                              className={cn(
-                                'flex h-5 w-5 items-center justify-center rounded-md border-2 transition-all',
-                                row.confirmed
-                                  ? 'border-blue-500 bg-blue-500'
-                                  : 'border-gray-300 bg-white hover:border-blue-400'
-                              )}
-                            >
-                              {row.confirmed ? (
-                                <CheckCheck className="h-3 w-3 text-white" />
-                              ) : null}
-                            </button>
-                          </div>
-                        </td>
-                      ) : null}
-
-                      {idx === 0 ? (
-                        <td
-                          rowSpan={2}
-                          className="w-16 py-1.5 align-middle text-center"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="flex justify-center gap-1.5">
-                            <Button
-                              size="sm"
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleDone(row.id);
-                              }}
-                              disabled={row.confirmed}
-                              title={
-                                row.done
-                                  ? 'Mark as not done'
-                                  : 'Mark row as done'
-                              }
-                              className={cn(
-                                'h-6 rounded-lg border px-2 text-[10px] font-bold shadow-none',
-                                row.confirmed
-                                  ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-300'
-                                  : row.done
-                                  ? 'border-emerald-500 bg-emerald-500 text-white hover:bg-emerald-600'
-                                  : 'border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-                              )}
-                            >
-                              <Check className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                void handleDelete(row);
-                              }}
-                              disabled={row.confirmed}
-                              title={
-                                row.confirmed
-                                  ? 'Confirmed rows cannot be deleted.'
-                                  : 'Delete table row'
-                              }
-                              className={cn(
-                                'h-6 rounded-lg border px-2 text-[10px] font-bold shadow-none',
-                                row.confirmed
-                                  ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-300'
-                                  : 'border-red-200 bg-red-50 text-red-500 hover:bg-red-100'
-                              )}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </td>
-                      ) : null}
-                    </tr>
-                  ))
-                )
-              )}
-            </tbody>
+              </tbody>
+            ) : (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={({ active }) => setActiveDragRowId(String(active.id))}
+                onDragCancel={() => setActiveDragRowId(null)}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={rows.map((row) => row.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {rows.map((row) => (
+                    <SortableCtRowGroup
+                      key={row.id}
+                      row={row}
+                      isActive={activeRowStageItemId === (row.stageItemId ?? null)}
+                      isDragging={activeDragRowId === row.id}
+                      machineTypeOptions={machineTypeOptions}
+                      machineTypeQueries={machineTypeQueries}
+                      openMachineDropdownId={openMachineDropdownId}
+                      selectedCtCell={selectedCtCell}
+                      sessionCategory={sessionCategory}
+                      dispatch={dispatch}
+                      onSelectRow={handleToggleRowSelection}
+                      onToggleStageItemActive={onToggleStageItemActive}
+                      onSetMachineDropdown={setOpenMachineDropdownId}
+                      onSetMachineQueries={setMachineTypeQueries}
+                      onMachineTypeQueryChange={handleMachineTypeQueryChange}
+                      onMachineTypeQueryBlur={handleMachineTypeQueryBlur}
+                      onMachineTypeSelect={handleMachineType}
+                      onConfirm={handleConfirm}
+                      onDone={handleDone}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            )}
           </table>
         </div>
       </div>
@@ -1048,6 +1078,28 @@ function findMachineTypeByQuery(
   );
 }
 
+function getFilteredMachineTypes(
+  row: CtRow,
+  machineTypeQueries: Record<string, string>,
+  machineTypeOptions: MachineTypeItem[],
+) {
+  const query = (machineTypeQueries[row.id] ?? '').trim().toLowerCase();
+
+  if (!query) {
+    return machineTypeOptions;
+  }
+
+  return machineTypeOptions.filter((machine) => {
+    const displayValue = formatMachineTypeOption(machine).toLowerCase();
+    return (
+      displayValue.includes(query) ||
+      machine.label.toLowerCase().includes(query) ||
+      machine.labelCn?.toLowerCase().includes(query) ||
+      machine.labelVn?.toLowerCase().includes(query)
+    );
+  });
+}
+
 function formatMetricValue(value: number) {
   return value.toFixed(2);
 }
@@ -1153,26 +1205,4 @@ function MetricRow({
       </span>
     </div>
   );
-}
-
-function getNearestTableRowNo(container: HTMLTableSectionElement, clientY: number) {
-  const rows = Array.from(
-    container.querySelectorAll<HTMLTableRowElement>('tr[data-drag-row]'),
-  );
-
-  let nearestNo: string | null = null;
-  let nearestDistance = Number.POSITIVE_INFINITY;
-
-  rows.forEach((row) => {
-    const rect = row.getBoundingClientRect();
-    const midpoint = rect.top + rect.height / 2;
-    const distance = Math.abs(clientY - midpoint);
-
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearestNo = row.dataset.dragRow ?? null;
-    }
-  });
-
-  return nearestNo;
 }

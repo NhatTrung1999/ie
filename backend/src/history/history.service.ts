@@ -14,6 +14,7 @@ export class HistoryService implements OnModuleInit {
 
   async onModuleInit() {
     await this.ensureTable();
+    await this.ensureStageOwnerColumn();
   }
 
   async listHistory(
@@ -21,6 +22,7 @@ export class HistoryService implements OnModuleInit {
     actor?: JwtUserPayload,
   ) {
     await this.ensureTable();
+    await this.ensureStageOwnerColumn();
 
     const normalizedStageItemId = filters.stageItemId?.trim();
     const normalizedStageCode = filters.stageCode?.trim().toUpperCase();
@@ -75,6 +77,7 @@ export class HistoryService implements OnModuleInit {
 
   async createHistory(payload: CreateHistoryDto, actor?: JwtUserPayload) {
     await this.ensureTable();
+    await this.ensureStageOwnerColumn();
 
     const stageCode = payload.stageCode?.trim().toUpperCase();
 
@@ -124,6 +127,7 @@ export class HistoryService implements OnModuleInit {
     actor?: JwtUserPayload,
   ) {
     await this.ensureTable();
+    await this.ensureStageOwnerColumn();
 
     const normalizedStageItemId = filters.stageItemId?.trim();
     const normalizedStageCode = filters.stageCode?.trim().toUpperCase();
@@ -189,6 +193,7 @@ export class HistoryService implements OnModuleInit {
 
   async deleteHistory(id: string, actor?: JwtUserPayload) {
     await this.ensureTable();
+    await this.ensureStageOwnerColumn();
 
     if (!id?.trim()) {
       throw new BadRequestException('History id is required.');
@@ -368,10 +373,23 @@ export class HistoryService implements OnModuleInit {
     `);
   }
 
+  private async ensureStageOwnerColumn() {
+    await this.prismaService.$executeRawUnsafe(`
+      IF OBJECT_ID(N'dbo.StageList', N'U') IS NOT NULL
+         AND COL_LENGTH('dbo.StageList', 'ownerUserId') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[StageList]
+        ADD [ownerUserId] UNIQUEIDENTIFIER NULL;
+      END
+    `);
+  }
+
   private async ensureHistoryAccess(
     filters: { stageItemId?: string; stageCode?: string },
     actor?: JwtUserPayload,
   ) {
+    await this.ensureStageOwnerColumn();
+
     if (!actor?.sub) {
       return;
     }

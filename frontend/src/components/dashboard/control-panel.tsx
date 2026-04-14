@@ -67,22 +67,24 @@ export function ControlPanel({
   const dispatch = useAppDispatch();
   const saveTimeoutRef = useRef<number | null>(null);
   const seekBarRef = useRef<HTMLDivElement | null>(null);
-  const { selectedItem, selectedCtCell, selectedTableRow, sessionCategory, activeStage } =
-    useAppSelector((state) => {
-    const selectedTableRow = state.dashboard.selectedCtCell
-      ? state.dashboard.tableRows.find((row) => row.id === state.dashboard.selectedCtCell?.rowId)
-      : undefined;
-
-    return {
-      selectedItem: state.dashboard.orderedStageItems.find(
-        (item) => item.id === state.dashboard.selectedItemId,
-      ),
-      selectedCtCell: state.dashboard.selectedCtCell,
-      selectedTableRow,
-      sessionCategory: state.auth.sessionUser.category,
-      activeStage: state.dashboard.activeStage,
-    };
-  });
+  const orderedStageItems = useAppSelector((state) => state.dashboard.orderedStageItems);
+  const selectedItemId = useAppSelector((state) => state.dashboard.selectedItemId);
+  const selectedCtCell = useAppSelector((state) => state.dashboard.selectedCtCell);
+  const tableRows = useAppSelector((state) => state.dashboard.tableRows);
+  const sessionCategory = useAppSelector((state) => state.auth.sessionUser.category);
+  const activeStage = useAppSelector((state) => state.dashboard.activeStage);
+  const selectedItem = useMemo(
+    () => orderedStageItems.find((item) => item.id === selectedItemId),
+    [orderedStageItems, selectedItemId],
+  );
+  const selectedTableRow = useMemo(
+    () => (
+      selectedCtCell
+        ? tableRows.find((row) => row.id === selectedCtCell.rowId)
+        : undefined
+    ),
+    [selectedCtCell, tableRows],
+  );
   const [elapsed, setElapsed] = useState(0);
   const [nva, setNva] = useState<number | null>(null);
   const [va, setVa] = useState<number | null>(null);

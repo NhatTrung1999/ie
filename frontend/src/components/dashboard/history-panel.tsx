@@ -12,10 +12,8 @@ type HistoryPanelProps = {
 
 export function HistoryPanel({ onDeleteApplied, onSelectItem }: HistoryPanelProps) {
   const dispatch = useAppDispatch();
-  const { historyItems, historyError } = useAppSelector((state) => ({
-    historyItems: state.dashboard.historyItems,
-    historyError: state.dashboard.historyError,
-  }));
+  const historyItems = useAppSelector((state) => state.dashboard.historyItems);
+  const historyError = useAppSelector((state) => state.dashboard.historyError);
 
   return (
     <div className="flex min-h-[220px] flex-1 flex-col overflow-hidden border-t-2 border-gray-100 lg:min-h-0">

@@ -1,5 +1,19 @@
 import { useRef, useState } from 'react';
 import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
   Copy,
   FileVideo,
   Filter,
@@ -27,6 +41,108 @@ type StageListPanelProps = {
   hideCompleted: boolean;
 };
 
+type SortableStageCardProps = {
+  item: StageItem;
+  isActive: boolean;
+  onSelectItem: (id: string) => void;
+  onDeleteItem: (id: string) => void;
+};
+
+function SortableStageCard({
+  item,
+  isActive,
+  onSelectItem,
+  onDeleteItem,
+}: SortableStageCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: isDragging ? 'none' : transition,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      onClick={() => onSelectItem(item.id)}
+      className={cn(
+        'group relative flex cursor-pointer items-center gap-2 rounded-xl border px-2 py-2 transition-all duration-200 transform-gpu will-change-transform',
+        isActive
+          ? 'border-blue-200 bg-linear-to-r from-blue-50 to-violet-50 shadow-sm'
+          : 'border-transparent hover:bg-gray-50',
+        isDragging
+          ? 'scale-[1.02] border-gray-200 bg-white opacity-70 shadow-xl'
+          : '',
+      )}
+    >
+      {isActive && !isDragging ? (
+        <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-linear-to-b from-blue-500 to-violet-500" />
+      ) : null}
+
+      <button
+        type="button"
+        title="Drag to reorder"
+        {...attributes}
+        {...listeners}
+        onClick={(e) => e.stopPropagation()}
+        className="shrink-0 rounded-md p-0.5 touch-none"
+      >
+        <GripVertical
+          className={cn(
+            'h-3.5 w-3.5 cursor-grab transition active:cursor-grabbing',
+            isActive ? 'text-blue-300' : 'text-gray-200 group-hover:text-gray-400',
+          )}
+        />
+      </button>
+
+      <div
+        className={cn(
+          'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition',
+          isActive ? 'bg-blue-100' : 'bg-gray-100 group-hover:bg-gray-200',
+        )}
+      >
+        <FileVideo
+          className={cn(
+            'h-3 w-3 transition',
+            isActive ? 'text-blue-600' : 'text-gray-400',
+          )}
+        />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p
+          className={cn(
+            'truncate text-xs font-medium transition',
+            isActive ? 'text-blue-700' : 'text-gray-600 group-hover:text-gray-800',
+          )}
+        >
+          {item.code}. {item.name}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDeleteItem(item.id);
+        }}
+        className="rounded-lg p-1 text-gray-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-400 group-hover:opacity-100"
+      >
+        <Trash2 className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
 export function StageListPanel({
   categories,
   activeStage,
@@ -42,16 +158,19 @@ export function StageListPanel({
   onToggleHideCompleted,
   hideCompleted,
 }: StageListPanelProps) {
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const tabsScrollRef = useRef<HTMLDivElement | null>(null);
-  const itemsContainerRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef({
     isMouseDown: false,
     isDragging: false,
     startX: 0,
     scrollLeft: 0,
   });
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 4 },
+    }),
+  );
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   const handleTabsMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!tabsScrollRef.current) return;
@@ -84,6 +203,16 @@ export function StageListPanel({
     window.setTimeout(() => {
       dragStateRef.current.isDragging = false;
     }, 0);
+  };
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    setActiveDragId(null);
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    onReorder(String(active.id), String(over.id));
   };
 
   return (
@@ -161,140 +290,12 @@ export function StageListPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
-        <div
-          ref={itemsContainerRef}
-          className={cn('flex flex-col gap-0.5', items.length === 0 ? 'h-full' : '')}
-          onDragOver={(e) => {
-            if (!draggingId || !itemsContainerRef.current) {
-              return;
-            }
-
-            e.preventDefault();
-            const nearestId = getNearestStageItemId(itemsContainerRef.current, e.clientY);
-
-            if (nearestId && nearestId !== draggingId) {
-              setDragOverId(nearestId);
-            }
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-
-            if (draggingId && dragOverId && draggingId !== dragOverId) {
-              onReorder(draggingId, dragOverId);
-            }
-
-            setDraggingId(null);
-            setDragOverId(null);
-          }}
-        >
+        <div className={cn('flex flex-col gap-0.5', items.length === 0 ? 'h-full' : '')}>
           {errorMessage ? (
             <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700">
               {errorMessage}
             </div>
           ) : null}
-
-          {items.map((item) => {
-            const isActive = selectedItemId === item.id;
-
-            return (
-              <div
-                key={item.id}
-                data-stage-id={item.id}
-                onClick={() => onSelectItem(item.id)}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setData('text/plain', item.id);
-                  setDraggingId(item.id);
-                }}
-                onDragEnd={() => {
-                  setDraggingId(null);
-                  setDragOverId(null);
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  if (draggingId && draggingId !== item.id) {
-                    setDragOverId(item.id);
-                  }
-                }}
-                className={cn(
-                  'group relative flex cursor-pointer items-center gap-2 rounded-xl border px-2 py-2 transition-all duration-200',
-                  isActive
-                    ? 'border-blue-200 bg-linear-to-r from-blue-50 to-violet-50 shadow-sm'
-                    : 'border-transparent hover:bg-gray-50',
-                  draggingId === item.id ? 'scale-[0.98] opacity-60' : '',
-                  dragOverId === item.id && draggingId !== item.id
-                    ? 'border-blue-300 bg-blue-50/70 ring-1 ring-blue-200'
-                    : '',
-                )}
-              >
-                {dragOverId === item.id && draggingId !== item.id ? (
-                  <div className="absolute inset-x-2 -top-0.5 h-0.5 rounded-full bg-blue-400" />
-                ) : null}
-
-                {isActive ? (
-                  <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-linear-to-b from-blue-500 to-violet-500" />
-                ) : null}
-
-                <button
-                  type="button"
-                  title="Drag to reorder"
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  className="shrink-0 rounded-md p-0.5"
-                >
-                  <GripVertical
-                    className={cn(
-                      'h-3.5 w-3.5 cursor-grab transition active:cursor-grabbing',
-                      isActive
-                        ? 'text-blue-300'
-                        : 'text-gray-200 group-hover:text-gray-400',
-                    )}
-                  />
-                </button>
-
-                <div
-                  className={cn(
-                    'flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition',
-                    isActive
-                      ? 'bg-blue-100'
-                      : 'bg-gray-100 group-hover:bg-gray-200',
-                  )}
-                >
-                  <FileVideo
-                    className={cn(
-                      'h-3 w-3 transition',
-                      isActive ? 'text-blue-600' : 'text-gray-400',
-                    )}
-                  />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p
-                    className={cn(
-                      'truncate text-xs font-medium transition',
-                      isActive
-                        ? 'text-blue-700'
-                        : 'text-gray-600 group-hover:text-gray-800',
-                    )}
-                  >
-                    {item.code}. {item.name}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteItem(item.id);
-                  }}
-                  className="rounded-lg p-1 text-gray-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-400 group-hover:opacity-100"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-            );
-          })}
 
           {items.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-2 py-6">
@@ -303,31 +304,32 @@ export function StageListPanel({
               </div>
               <p className="text-[11px] text-gray-400">No stages yet</p>
             </div>
-          ) : null}
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={({ active }) => setActiveDragId(String(active.id))}
+              onDragCancel={() => setActiveDragId(null)}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={items.map((item) => item.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {items.map((item) => (
+                  <SortableStageCard
+                    key={item.id}
+                    item={item}
+                    isActive={selectedItemId === item.id || activeDragId === item.id}
+                    onSelectItem={onSelectItem}
+                    onDeleteItem={onDeleteItem}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          )}
         </div>
       </div>
     </div>
   );
-}
-
-function getNearestStageItemId(container: HTMLDivElement, clientY: number) {
-  const items = Array.from(
-    container.querySelectorAll<HTMLElement>('[data-stage-id]'),
-  );
-
-  let nearestId: string | null = null;
-  let nearestDistance = Number.POSITIVE_INFINITY;
-
-  items.forEach((item) => {
-    const rect = item.getBoundingClientRect();
-    const midpoint = rect.top + rect.height / 2;
-    const distance = Math.abs(clientY - midpoint);
-
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearestId = item.dataset.stageId ?? null;
-    }
-  });
-
-  return nearestId;
 }

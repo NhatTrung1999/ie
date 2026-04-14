@@ -285,9 +285,23 @@ export function DashboardPage({
 
   const handleStageReorder = (activeId: string, overId: string) => {
     const stageScoped = orderedStageItems.filter((item) => item.stage === activeStage);
-    const reorderedScoped = reorderItems(stageScoped, activeId, overId);
+    const visibleStageScoped = stageScoped.filter(
+      (item) => !hideCompletedStageItems || !item.completed,
+    );
+    const reorderedVisibleScoped = reorderItems(visibleStageScoped, activeId, overId);
+    const reorderedVisibleIds = reorderedVisibleScoped.map((item) => item.id);
+    const reorderedVisibleQueue = [...reorderedVisibleScoped];
+    const reorderedScoped = stageScoped.map((item) => {
+      if (!reorderedVisibleIds.includes(item.id)) {
+        return item;
+      }
 
-    dispatch(setTableRows(sortRowsByStageItems(tableRows, reorderedScoped)));
+      return reorderedVisibleQueue.shift() ?? item;
+    });
+
+    const syncedRows = sortRowsByStageItems(tableRows, reorderedScoped);
+
+    dispatch(setTableRows(syncedRows));
     dispatch(
       reorderStageItems({
         stage: activeStage,
@@ -305,6 +319,17 @@ export function DashboardPage({
       ));
 
       void loadStages().catch(() => {});
+    });
+
+    void reorderTableCtRows({
+      stage: activeStage,
+      orderedIds: syncedRows.map((row) => row.id),
+    }).catch(() => {
+      void dispatch(
+        loadTableRows({
+          stage: activeStage,
+        }),
+      );
     });
   };
 
@@ -336,6 +361,8 @@ export function DashboardPage({
     dispatch(setStageItems(nextItems));
     dispatch(setTableRows(nextRows));
 
+    const nextStageScoped = nextItems.filter((item) => item.stage === activeStage);
+
     void reorderTableCtRows({
       stage: activeStage,
       orderedIds: nextRows.map((row) => row.id),
@@ -345,6 +372,17 @@ export function DashboardPage({
           stage: activeStage,
         }),
       );
+    });
+
+    void reorderStages({
+      stage: activeStage,
+      orderedIds: nextStageScoped.map((item) => item.id),
+    }).catch((error) => {
+      dispatch(setStageItemsError(
+        error instanceof Error ? error.message : 'Unable to save stage order.',
+      ));
+
+      void loadStages().catch(() => {});
     });
   };
 
