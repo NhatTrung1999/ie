@@ -19,6 +19,7 @@ model User {
 
 model StageList {
   id        String    @id @default(dbgenerated("newid()")) @db.UniqueIdentifier
+  ownerUserId String? @db.UniqueIdentifier
   code      String    @db.NVarChar(50)
   name      String    @db.NVarChar(255)
   season    String?   @db.NVarChar(100)

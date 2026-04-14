@@ -634,17 +634,17 @@ export function ControlPanel({
 
       {isCuttingModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 px-4 backdrop-blur-[2px]">
-          <div className="w-full max-w-[432px] overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.18)]">
-            <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
+          <div className="w-full max-w-92 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white shadow-[0_24px_72px_rgba(15,23,42,0.18)]">
+            <div className="border-b border-slate-100 px-4 py-3.5 sm:px-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="h-4 w-1 rounded-full bg-gradient-to-b from-blue-500 to-violet-500" />
+                    <span className="h-4 w-1 rounded-full bg-linear-to-b from-blue-500 to-violet-500" />
                     <span className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
                       LSA Cutting
                     </span>
                   </div>
-                  <h2 className="text-[22px] font-semibold tracking-tight text-slate-700">
+                  <h2 className="text-[19px] font-semibold tracking-tight text-slate-700">
                     Cutting Parameters
                   </h2>
                 </div>
@@ -654,53 +654,55 @@ export function ControlPanel({
                     setIsCuttingModalOpen(false);
                     setCuttingModalError('');
                   }}
-                  className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                  className="rounded-xl p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-4.5 w-4.5" />
                 </button>
               </div>
             </div>
 
-            <div className="space-y-4 px-5 py-5 sm:px-6">
-              <label className="block space-y-2">
-                <span className="text-[14px] font-medium text-slate-700">
-                  Number of pieces
-                </span>
-                <input
-                  type="number"
-                  min="1"
-                  value={piecesInput}
-                  onChange={(event) => setPiecesInput(event.target.value)}
-                  placeholder="Enter your pieces..."
-                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-                />
-              </label>
+            <div className="space-y-3.5 px-4 py-4 sm:px-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block space-y-1.5">
+                  <span className="text-[13px] font-medium text-slate-700">
+                    Pieces
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={piecesInput}
+                    onChange={(event) => setPiecesInput(event.target.value)}
+                    placeholder="Pieces"
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                  />
+                </label>
 
-              <label className="block space-y-2">
-                <span className="text-[14px] font-medium text-slate-700">
-                  Number of layers
-                </span>
-                <input
-                  type="number"
-                  min="1"
-                  value={layersInput}
-                  onChange={(event) => setLayersInput(event.target.value)}
-                  placeholder="Enter your layers..."
-                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
-                />
-              </label>
+                <label className="block space-y-1.5">
+                  <span className="text-[13px] font-medium text-slate-700">
+                    Layers
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={layersInput}
+                    onChange={(event) => setLayersInput(event.target.value)}
+                    placeholder="Layers"
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                  />
+                </label>
+              </div>
 
               {cuttingModalError ? (
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-500">
+                <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] font-medium text-red-500">
                   {cuttingModalError}
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
+              <div className="grid grid-cols-2 gap-2 pt-0.5">
                 <button
                   type="button"
                   onClick={handleCuttingModalDone}
-                  className="h-12 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(16,185,129,0.22)] transition hover:from-emerald-600 hover:to-emerald-700"
+                  className="h-10 rounded-xl bg-linear-to-r from-emerald-500 to-emerald-600 text-[13px] font-semibold text-white shadow-[0_10px_24px_rgba(16,185,129,0.22)] transition hover:from-emerald-600 hover:to-emerald-700"
                 >
                   Done
                 </button>
@@ -710,7 +712,7 @@ export function ControlPanel({
                     setIsCuttingModalOpen(false);
                     setCuttingModalError('');
                   }}
-                  className="h-12 rounded-2xl bg-gradient-to-r from-rose-500 to-red-500 text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(239,68,68,0.2)] transition hover:from-rose-600 hover:to-red-600"
+                  className="h-10 rounded-xl bg-linear-to-r from-rose-500 to-red-500 text-[13px] font-semibold text-white shadow-[0_10px_24px_rgba(239,68,68,0.2)] transition hover:from-rose-600 hover:to-red-600"
                 >
                   Cancel
                 </button>

@@ -117,19 +117,42 @@ export class UsersService implements OnModuleInit {
   }
 
   private async ensureDefaultUser() {
-    const existingUser = await this.prismaService.user.findUnique({
+    const adminUser = await this.prismaService.user.findUnique({
+      where: { username: 'admin' },
+    });
+
+    if (adminUser) {
+      await this.prismaService.user.update({
+        where: { id: adminUser.id },
+        data: {
+          passwordHash: hashPassword('test'),
+          displayName: 'Admin',
+        },
+      });
+      return;
+    }
+
+    const legacyAdministrator = await this.prismaService.user.findUnique({
       where: { username: 'administrator' },
     });
 
-    if (existingUser) {
+    if (legacyAdministrator) {
+      await this.prismaService.user.update({
+        where: { id: legacyAdministrator.id },
+        data: {
+          username: 'admin',
+          passwordHash: hashPassword('test'),
+          displayName: 'Admin',
+        },
+      });
       return;
     }
 
     await this.prismaService.user.create({
       data: {
-        username: 'administrator',
-        passwordHash: hashPassword('password'),
-        displayName: 'Administrator',
+        username: 'admin',
+        passwordHash: hashPassword('test'),
+        displayName: 'Admin',
       },
     });
   }

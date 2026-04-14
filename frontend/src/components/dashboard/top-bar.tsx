@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ChevronRight,
   LogOut,
-  Settings,
   SlidersHorizontal,
-  User,
   UserPlus,
   Video,
   ClipboardList,
@@ -99,25 +97,6 @@ export function TopBar({
 
               {isAdminUser ? (
                 <>
-                  {[
-                    { icon: User, label: 'Profile' },
-                    { icon: Settings, label: 'Settings' },
-                  ].map(({ icon: Icon, label }) => (
-                    <button
-                      key={label}
-                      className="w-full px-3 py-2 text-left transition hover:bg-gray-50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-100">
-                          <Icon className="h-3.5 w-3.5 text-gray-500" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-gray-700">{label}</p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-
                   <button
                     onClick={onOpenCreateUser}
                     className="w-full px-3 py-2 text-left transition hover:bg-blue-50"

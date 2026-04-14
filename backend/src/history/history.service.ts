@@ -16,11 +16,21 @@ export class HistoryService implements OnModuleInit {
     await this.ensureTable();
   }
 
-  async listHistory(filters: { stageItemId?: string; stageCode?: string }) {
+  async listHistory(
+    filters: { stageItemId?: string; stageCode?: string },
+    actor?: JwtUserPayload,
+  ) {
     await this.ensureTable();
 
     const normalizedStageItemId = filters.stageItemId?.trim();
     const normalizedStageCode = filters.stageCode?.trim().toUpperCase();
+    await this.ensureHistoryAccess(
+      {
+        stageItemId: normalizedStageItemId,
+        stageCode: normalizedStageCode,
+      },
+      actor,
+    );
     const historyWhere = normalizedStageItemId
       ? { stageItemId: normalizedStageItemId }
       : normalizedStageCode
@@ -63,7 +73,7 @@ export class HistoryService implements OnModuleInit {
     };
   }
 
-  async createHistory(payload: CreateHistoryDto) {
+  async createHistory(payload: CreateHistoryDto, actor?: JwtUserPayload) {
     await this.ensureTable();
 
     const stageCode = payload.stageCode?.trim().toUpperCase();
@@ -75,6 +85,14 @@ export class HistoryService implements OnModuleInit {
     if (!['NVA', 'VA', 'SKIP'].includes(payload.type)) {
       throw new BadRequestException('History type is invalid.');
     }
+
+    await this.ensureHistoryAccess(
+      {
+        stageItemId: payload.stageItemId?.trim() || undefined,
+        stageCode,
+      },
+      actor,
+    );
 
     const created = await this.prismaService.historyEntry.create({
       data: {
@@ -101,7 +119,10 @@ export class HistoryService implements OnModuleInit {
     };
   }
 
-  async commitHistory(filters: { stageItemId?: string; stageCode?: string }) {
+  async commitHistory(
+    filters: { stageItemId?: string; stageCode?: string },
+    actor?: JwtUserPayload,
+  ) {
     await this.ensureTable();
 
     const normalizedStageItemId = filters.stageItemId?.trim();
@@ -110,6 +131,14 @@ export class HistoryService implements OnModuleInit {
     if (!normalizedStageItemId && !normalizedStageCode) {
       throw new BadRequestException('Stage item id or stage code is required.');
     }
+
+    await this.ensureHistoryAccess(
+      {
+        stageItemId: normalizedStageItemId,
+        stageCode: normalizedStageCode,
+      },
+      actor,
+    );
 
     const historyWhere = normalizedStageItemId
       ? { stageItemId: normalizedStageItemId }
@@ -172,6 +201,14 @@ export class HistoryService implements OnModuleInit {
     if (!existing) {
       throw new NotFoundException('History item was not found.');
     }
+
+    await this.ensureHistoryAccess(
+      {
+        stageItemId: existing.stageItemId ?? undefined,
+        stageCode: existing.stageCode,
+      },
+      actor,
+    );
 
     if (existing.committed) {
       throw new BadRequestException(
@@ -329,6 +366,35 @@ export class HistoryService implements OnModuleInit {
         ALTER TABLE [dbo].[HistoryPlayback] ALTER COLUMN [endTime] FLOAT NOT NULL;
       END
     `);
+  }
+
+  private async ensureHistoryAccess(
+    filters: { stageItemId?: string; stageCode?: string },
+    actor?: JwtUserPayload,
+  ) {
+    if (!actor?.sub) {
+      return;
+    }
+
+    const stageItemId = filters.stageItemId?.trim();
+    const stageCode = filters.stageCode?.trim().toUpperCase();
+
+    if (!stageItemId && !stageCode) {
+      return;
+    }
+
+    const accessibleStage = await this.prismaService.stageList.findFirst({
+      where: {
+        ownerUserId: actor.sub,
+        ...(stageItemId ? { id: stageItemId } : {}),
+        ...(!stageItemId && stageCode ? { code: stageCode } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (!accessibleStage) {
+      throw new NotFoundException('History item was not found.');
+    }
   }
 }
 

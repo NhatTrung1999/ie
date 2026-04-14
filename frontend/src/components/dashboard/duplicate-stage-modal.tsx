@@ -72,7 +72,7 @@ export function DuplicateStageModal({
     setSubmitError('');
 
     void fetchStages({
-      keyword: season,
+      season,
       dateFrom: formatDateValue(dateFrom),
       dateTo: formatDateValue(dateTo),
       stage: stageCode === 'Choose option' ? '' : stageCode,
@@ -125,11 +125,11 @@ export function DuplicateStageModal({
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/25 px-4 py-6 backdrop-blur-[2px] sm:py-8">
-      <div className="w-full max-w-[760px] overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_20px_64px_rgba(15,23,42,0.16)]">
+      <div className="w-full max-w-190 overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_20px_64px_rgba(15,23,42,0.16)]">
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="h-4 w-1 rounded-full bg-gradient-to-b from-blue-500 to-violet-500" />
+              <span className="h-4 w-1 rounded-full bg-linear-to-b from-blue-500 to-violet-500" />
               <span className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
                 Stage Library
               </span>
@@ -211,7 +211,7 @@ export function DuplicateStageModal({
                 <button
                   type="button"
                   onClick={handleSearch}
-                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-slate-600 to-slate-700 text-[14px] font-semibold text-white transition hover:from-slate-700 hover:to-slate-800"
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-slate-600 to-slate-700 text-[14px] font-semibold text-white transition hover:from-slate-700 hover:to-slate-800"
                 >
                   Search
                 </button>
@@ -233,13 +233,13 @@ export function DuplicateStageModal({
               ) : null}
             </div>
             {results.length === 0 ? (
-              <div className="flex min-h-[120px] items-center justify-center px-4 text-center">
+              <div className="flex min-h-30 items-center justify-center px-4 text-center">
                 <div>
                   <div className="text-[15px] font-semibold text-slate-500">No Data</div>
                 </div>
               </div>
             ) : (
-              <div className="max-h-[220px] overflow-y-auto p-2">
+              <div className="max-h-55 overflow-y-auto p-2">
                 <div className="flex flex-col gap-1.5">
                   {results.map((item) => {
                     const isSelected = selectedIds.includes(item.id);
@@ -417,7 +417,7 @@ function DateInput({
       {open ? (
         <div
           className={[
-            'absolute top-[calc(100%+0.5rem)] z-50 w-[280px] rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_20px_60px_rgba(15,23,42,0.14)]',
+            'absolute top-[calc(100%+0.5rem)] z-50 w-70 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_20px_60px_rgba(15,23,42,0.14)]',
             align === 'right' ? 'right-0' : 'left-0',
           ].join(' ')}
         >
@@ -478,7 +478,7 @@ function DateInput({
                   className={[
                     'flex h-8 items-center justify-center rounded-lg text-sm transition',
                     isSelected
-                      ? 'bg-gradient-to-r from-blue-500 to-violet-500 font-semibold text-white shadow-sm'
+                      ? 'bg-linear-to-r from-blue-500 to-violet-500 font-semibold text-white shadow-sm'
                       : isCurrentMonth
                         ? 'text-slate-700 hover:bg-slate-100'
                         : 'text-slate-300 hover:bg-slate-50',

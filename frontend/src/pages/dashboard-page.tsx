@@ -255,8 +255,8 @@ export function DashboardPage({
     dispatch(setSelectedCtCell(null));
   }, [activeLinkedItemId, dispatch, filteredItems, selectedItemId]);
 
-  const handleRefreshTable = async () => {
-    if (selectedItem) {
+  const handleRefreshTable = async (options?: { ignoreSelection?: boolean }) => {
+    if (selectedItem && !options?.ignoreSelection) {
       await dispatch(
         loadTableRows({
           stage: selectedItem.stage,

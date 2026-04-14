@@ -83,6 +83,7 @@ export async function createStages(payload: {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 0,
       signal: payload.signal,
       onUploadProgress: (progressEvent) => {
         if (!payload.onProgress || !progressEvent.total) {

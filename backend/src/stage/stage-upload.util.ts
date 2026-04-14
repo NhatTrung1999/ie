@@ -1,6 +1,6 @@
 import { createWriteStream, existsSync, mkdirSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { extname, join, relative } from 'node:path';
 
 import type { Request } from 'express';
 import type { StorageEngine } from 'multer';
@@ -12,12 +12,41 @@ function sanitizeFileName(fileName: string) {
     .toLowerCase();
 }
 
-export const stageUploadDir = join(process.cwd(), 'uploads', 'stages');
+function sanitizePathSegment(value: string | undefined, fallback: string) {
+  const normalized = sanitizeFileName((value ?? '').trim());
+  return normalized || fallback;
+}
+
+export const stageUploadDir = join(process.cwd(), 'uploads');
 
 export function ensureStageUploadDir() {
   if (!existsSync(stageUploadDir)) {
     mkdirSync(stageUploadDir, { recursive: true });
   }
+}
+
+function createStageUploadDirectory(req: Request) {
+  const body = (req.body ?? {}) as Record<string, string | undefined>;
+  const dateSegment = sanitizePathSegment(body.date, 'unknown-date');
+  const seasonSegment = sanitizePathSegment(body.season, 'unknown-season');
+  const stageSegment = sanitizePathSegment(body.stageCode, 'unknown-stage');
+  const areaSegment = sanitizePathSegment(body.area, 'unknown-area');
+  const articleSegment = sanitizePathSegment(body.article, 'unknown-article');
+
+  const directory = join(
+    stageUploadDir,
+    dateSegment,
+    seasonSegment,
+    stageSegment,
+    areaSegment,
+    articleSegment,
+  );
+
+  if (!existsSync(directory)) {
+    mkdirSync(directory, { recursive: true });
+  }
+
+  return directory;
 }
 
 function createUploadFileName(originalName: string) {
@@ -26,12 +55,21 @@ function createUploadFileName(originalName: string) {
   return `${safeName || 'video'}-${suffix}${extname(originalName)}`;
 }
 
+export function getStageVideoUrl(filePath: string) {
+  const relativePath = relative(join(process.cwd(), 'uploads'), filePath)
+    .split('\\')
+    .join('/');
+
+  return `/uploads/${relativePath}`;
+}
+
 export const stageUploadStorage: StorageEngine = {
   _handleFile(req: Request, file, cb) {
     ensureStageUploadDir();
 
+    const destinationDir = createStageUploadDirectory(req);
     const fileName = createUploadFileName(file.originalname);
-    const filePath = join(stageUploadDir, fileName);
+    const filePath = join(destinationDir, fileName);
     const outStream = createWriteStream(filePath);
     let settled = false;
     let cleanedUp = false;
@@ -82,7 +120,7 @@ export const stageUploadStorage: StorageEngine = {
       settled = true;
       completed = true;
       cb(null, {
-        destination: stageUploadDir,
+        destination: destinationDir,
         filename: fileName,
         path: filePath,
         size: outStream.bytesWritten,

@@ -22,13 +22,13 @@ export function DashboardShell({
       <div className="flex flex-1 flex-col overflow-auto md:overflow-hidden lg:flex-row">
         <aside className="flex shrink-0 flex-col overflow-hidden border-b-2 border-gray-100 bg-white md:max-h-[48vh] lg:w-64 lg:max-h-none lg:border-r-2 lg:border-b-0 xl:w-72">
           <div
-            className="flex min-h-[260px] flex-col overflow-hidden md:min-h-[300px] lg:min-h-0"
+            className="flex min-h-65 flex-col overflow-hidden md:min-h-75 lg:min-h-0"
             style={{ flex: '0 0 35%' }}
           >
             {sidebar}
           </div>
 
-          <div className="flex min-h-[300px] flex-1 flex-col overflow-hidden lg:min-h-0">
+          <div className="flex min-h-75 flex-1 flex-col overflow-hidden lg:min-h-0">
             {controlPanel}
           </div>
         </aside>

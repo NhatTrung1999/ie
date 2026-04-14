@@ -11,23 +11,37 @@ export class HistoryController {
 
   @Get()
   getHistory(
+    @Req()
+    request: Request & {
+      user: JwtUserPayload;
+    },
     @Query('stageItemId') stageItemId?: string,
     @Query('stageCode') stageCode?: string,
   ) {
-    return this.historyService.listHistory({ stageItemId, stageCode });
+    return this.historyService.listHistory({ stageItemId, stageCode }, request.user);
   }
 
   @Post()
-  createHistory(@Body() payload: CreateHistoryDto) {
-    return this.historyService.createHistory(payload);
+  createHistory(
+    @Body() payload: CreateHistoryDto,
+    @Req()
+    request: Request & {
+      user: JwtUserPayload;
+    },
+  ) {
+    return this.historyService.createHistory(payload, request.user);
   }
 
   @Patch('commit')
   commitHistory(
+    @Req()
+    request: Request & {
+      user: JwtUserPayload;
+    },
     @Body('stageItemId') stageItemId?: string,
     @Body('stageCode') stageCode?: string,
   ) {
-    return this.historyService.commitHistory({ stageItemId, stageCode });
+    return this.historyService.commitHistory({ stageItemId, stageCode }, request.user);
   }
 
   @Delete(':id')

@@ -28,8 +28,14 @@ export class StageController {
   constructor(private readonly stageService: StageService) {}
 
   @Get()
-  getStages(@Query() filters: ListStagesDto) {
-    return this.stageService.listStages(filters);
+  getStages(
+    @Query() filters: ListStagesDto,
+    @Req()
+    request: Request & {
+      user: JwtUserPayload;
+    },
+  ) {
+    return this.stageService.listStages(filters, request.user);
   }
 
   @Post()
@@ -51,25 +57,40 @@ export class StageController {
       },
       limits: {
         files: 5,
-        fileSize: 250 * 1024 * 1024,
       },
     }),
   )
   createStages(
     @Body() payload: CreateStageDto,
     @UploadedFiles() files: Express.Multer.File[] = [],
+    @Req()
+    request: Request & {
+      user: JwtUserPayload;
+    },
   ) {
-    return this.stageService.createStages(payload, files);
+    return this.stageService.createStages(payload, files, request.user);
   }
 
   @Post('duplicate')
-  duplicateStage(@Body() payload: DuplicateStageDto) {
-    return this.stageService.duplicateStage(payload);
+  duplicateStage(
+    @Body() payload: DuplicateStageDto,
+    @Req()
+    request: Request & {
+      user: JwtUserPayload;
+    },
+  ) {
+    return this.stageService.duplicateStage(payload, request.user);
   }
 
   @Patch('reorder')
-  reorderStages(@Body() payload: ReorderStageDto) {
-    return this.stageService.reorderStages(payload);
+  reorderStages(
+    @Body() payload: ReorderStageDto,
+    @Req()
+    request: Request & {
+      user: JwtUserPayload;
+    },
+  ) {
+    return this.stageService.reorderStages(payload, request.user);
   }
 
   @Delete(':id')

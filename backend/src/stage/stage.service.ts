@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { copyFile, unlink } from 'node:fs/promises';
-import { basename, extname, join } from 'node:path';
+import { dirname, extname, join } from 'node:path';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,7 +11,7 @@ import type { CreateStageDto } from './dto/create-stage.dto';
 import type { DuplicateStageDto } from './dto/duplicate-stage.dto';
 import type { ListStagesDto } from './dto/list-stages.dto';
 import type { ReorderStageDto } from './dto/reorder-stage.dto';
-import { ensureStageUploadDir } from './stage-upload.util';
+import { ensureStageUploadDir, getStageVideoUrl } from './stage-upload.util';
 
 @Injectable()
 export class StageService implements OnModuleInit {
@@ -27,7 +27,7 @@ export class StageService implements OnModuleInit {
     await this.ensureSeedData();
   }
 
-  async listStages(filters: ListStagesDto = {}) {
+  async listStages(filters: ListStagesDto = {}, actor?: JwtUserPayload) {
     await this.ensureStageTable();
 
     const where: Prisma.StageListWhereInput = {};
@@ -57,6 +57,10 @@ export class StageService implements OnModuleInit {
 
     if (normalizedArticle) {
       where.article = { contains: normalizedArticle };
+    }
+
+    if (actor?.sub) {
+      where.ownerUserId = actor.sub;
     }
 
     const stages = await this.prismaService.stageList.findMany({
@@ -134,13 +138,17 @@ export class StageService implements OnModuleInit {
             completionMap.get(completionKey) ??
             completionMap.get(fallbackCompletionKey) ??
             false,
-          videoUrl: item.filePath ? `/uploads/stages/${basename(item.filePath)}` : undefined,
+          videoUrl: item.filePath ? getStageVideoUrl(item.filePath) : undefined,
         };
       }),
     };
   }
 
-  async createStages(payload: CreateStageDto, files: any[] = []) {
+  async createStages(
+    payload: CreateStageDto,
+    files: any[] = [],
+    actor?: JwtUserPayload,
+  ) {
     await this.ensureStageTable();
 
     const normalizedArea = await this.stageCategoryService.normalizeAndValidate(
@@ -163,7 +171,10 @@ export class StageService implements OnModuleInit {
 
     try {
       const stageCount = await this.prismaService.stageList.count({
-        where: { area: normalizedArea },
+        where: {
+          area: normalizedArea,
+          ...(actor?.sub ? { ownerUserId: actor.sub } : {}),
+        },
       });
       createdStages = await this.prismaService.$transaction(async (tx) => {
         const created: Prisma.StageListGetPayload<Record<string, never>>[] = [];
@@ -175,6 +186,7 @@ export class StageService implements OnModuleInit {
           );
           const stage = await tx.stageList.create({
             data: {
+              ownerUserId: actor?.sub ?? null,
               code: parsedIdentity.code,
               name: parsedIdentity.name,
               stage: selectedProcessStage ?? normalizedArea,
@@ -227,13 +239,13 @@ export class StageService implements OnModuleInit {
           stage: item.area ?? item.stage,
           stageDate: item.stageDate?.toISOString().slice(0, 10) ?? null,
           completed: false,
-          videoUrl: item.filePath ? `/uploads/stages/${basename(item.filePath)}` : undefined,
+          videoUrl: item.filePath ? getStageVideoUrl(item.filePath) : undefined,
         };
       }),
     };
   }
 
-  async duplicateStage(payload: DuplicateStageDto) {
+  async duplicateStage(payload: DuplicateStageDto, actor?: JwtUserPayload) {
     await this.ensureStageTable();
 
     const sourceId = payload.sourceId?.trim();
@@ -254,8 +266,13 @@ export class StageService implements OnModuleInit {
       throw new NotFoundException('Source stage item was not found.');
     }
 
+    this.ensureStageOwnership(sourceStage.ownerUserId, actor);
+
     const targetCount = await this.prismaService.stageList.count({
-      where: { area: targetArea },
+      where: {
+        area: targetArea,
+        ...(actor?.sub ? { ownerUserId: actor.sub } : {}),
+      },
     });
     const relatedCopies = await this.prismaService.stageList.count({
       where: {
@@ -274,6 +291,7 @@ export class StageService implements OnModuleInit {
     const duplicatedStage = await this.prismaService.$transaction(async (tx) => {
       const createdStage = await tx.stageList.create({
         data: {
+          ownerUserId: actor?.sub ?? null,
           code: duplicateCode,
           name: duplicateName,
           stage: sourceStage.stage,
@@ -387,13 +405,13 @@ export class StageService implements OnModuleInit {
         stageDate: duplicatedStage.stageDate?.toISOString().slice(0, 10) ?? null,
         completed: false,
         videoUrl: duplicatedStage.filePath
-          ? `/uploads/stages/${basename(duplicatedStage.filePath)}`
+          ? getStageVideoUrl(duplicatedStage.filePath)
           : undefined,
       },
     };
   }
 
-  async reorderStages(payload: ReorderStageDto) {
+  async reorderStages(payload: ReorderStageDto, actor?: JwtUserPayload) {
     await this.ensureStageTable();
 
     const normalizedStage = await this.stageCategoryService.normalizeAndValidate(
@@ -407,7 +425,10 @@ export class StageService implements OnModuleInit {
     }
 
     const existingItems = await this.prismaService.stageList.findMany({
-      where: { area: normalizedStage },
+      where: {
+        area: normalizedStage,
+        ...(actor?.sub ? { ownerUserId: actor.sub } : {}),
+      },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
 
@@ -449,6 +470,8 @@ export class StageService implements OnModuleInit {
       throw new NotFoundException('Stage item was not found.');
     }
 
+    this.ensureStageOwnership(targetStage.ownerUserId, actor);
+
     const parsedIdentity = parseStageIdentity(targetStage.name, targetStage.code);
 
     await this.prismaService.$transaction(async (tx) => {
@@ -487,7 +510,10 @@ export class StageService implements OnModuleInit {
       });
 
       const remainingItems = await tx.stageList.findMany({
-        where: { area: targetStage.area ?? targetStage.stage },
+        where: {
+          area: targetStage.area ?? targetStage.stage,
+          ...(targetStage.ownerUserId ? { ownerUserId: targetStage.ownerUserId } : {}),
+        },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
       });
 
@@ -577,6 +603,7 @@ export class StageService implements OnModuleInit {
           [cutDie] NVARCHAR(100) NULL,
           [area] NVARCHAR(50) NULL,
           [article] NVARCHAR(255) NULL,
+          [ownerUserId] UNIQUEIDENTIFIER NULL,
           [duration] NVARCHAR(20) NOT NULL,
           [mood] NVARCHAR(20) NOT NULL,
           [stage] NVARCHAR(50) NOT NULL,
@@ -592,6 +619,12 @@ export class StageService implements OnModuleInit {
       BEGIN
         ALTER TABLE [dbo].[StageList]
         ADD [article] NVARCHAR(255) NULL;
+      END
+
+      IF COL_LENGTH('dbo.StageList', 'ownerUserId') IS NULL
+      BEGIN
+        ALTER TABLE [dbo].[StageList]
+        ADD [ownerUserId] UNIQUEIDENTIFIER NULL;
       END
 
       IF COL_LENGTH('dbo.StageList', 'sortOrder') IS NULL
@@ -622,6 +655,21 @@ export class StageService implements OnModuleInit {
       BEGIN
         ALTER TABLE [dbo].[StageList]
         ADD [updatedAt] DATETIME2 NOT NULL CONSTRAINT [StageList_updatedAt_df] DEFAULT SYSUTCDATETIME();
+      END
+
+      IF COL_LENGTH('dbo.StageList', 'ownerUserId') IS NOT NULL
+         AND OBJECT_ID(N'dbo.[User]', N'U') IS NOT NULL
+      BEGIN
+        UPDATE s
+        SET s.[ownerUserId] = u.[id]
+        FROM [dbo].[StageList] s
+        CROSS JOIN (
+          SELECT TOP 1 [id]
+          FROM [dbo].[User]
+          WHERE [username] IN ('admin', 'administrator')
+          ORDER BY CASE WHEN [username] = 'admin' THEN 0 ELSE 1 END
+        ) u
+        WHERE s.[ownerUserId] IS NULL;
       END
     `);
   }
@@ -685,6 +733,19 @@ export class StageService implements OnModuleInit {
         },
       ],
     });
+  }
+
+  private ensureStageOwnership(
+    ownerUserId: string | null | undefined,
+    actor?: JwtUserPayload,
+  ) {
+    if (!actor?.sub) {
+      return;
+    }
+
+    if (ownerUserId && ownerUserId !== actor.sub) {
+      throw new NotFoundException('Stage item was not found.');
+    }
   }
 }
 
@@ -753,9 +814,7 @@ async function cloneStageVideoFile(sourcePath: string, duplicateCode: string) {
     .toLowerCase();
   const suffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
   const targetPath = join(
-    process.cwd(),
-    'uploads',
-    'stages',
+    dirname(sourcePath),
     `${safeBaseName || 'video'}-${suffix}${extension}`,
   );
 

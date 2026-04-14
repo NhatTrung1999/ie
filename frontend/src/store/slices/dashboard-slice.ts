@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/tool
 
 import { commitHistory, createHistory, deleteHistory, fetchHistory } from '@/services/history';
 import { fetchStages } from '@/services/stages';
+import { signOut } from '@/store/slices/auth-slice';
 import {
   confirmTableCtRows,
   fetchTableCt,
@@ -310,7 +311,10 @@ const dashboardSlice = createSlice({
       .addCase(loadStages.fulfilled, (state, action) => {
         if (action.payload.length === 0) {
           state.orderedStageItems = [];
+          state.tableRows = [];
+          state.historyItems = [];
           state.selectedItemId = '';
+          state.selectedCtCell = null;
           state.stageItemsError = '';
           return;
         }
@@ -433,7 +437,10 @@ const dashboardSlice = createSlice({
           typeof action.payload === 'string'
             ? action.payload
             : 'Unable to delete history item.';
-      });
+      })
+      .addCase(signOut, () => initialState)
+      .addCase('auth/signIn/fulfilled', () => initialState)
+      .addCase('auth/bootstrapSession/rejected', () => initialState);
   },
 });
 

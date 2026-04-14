@@ -82,10 +82,6 @@ export class AuthService {
       );
     }
 
-    if (password.length < 6) {
-      throw new BadRequestException('Password must be at least 6 characters.');
-    }
-
     const existingUser = await this.usersService.findByUsername(username);
 
     if (existingUser) {
@@ -134,7 +130,7 @@ export class AuthService {
       throw new NotFoundException('User not found.');
     }
 
-    if (existingUser.username === 'administrator') {
+    if (existingUser.username === 'admin') {
       throw new ForbiddenException('The default administrator cannot be deleted.');
     }
 

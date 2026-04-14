@@ -10,15 +10,24 @@ function hashPassword(password) {
 }
 
 async function main() {
-  const existing = await prisma.user.findUnique({
-    where: { username: 'administrator' },
+  const existing = await prisma.user.findFirst({
+    where: {
+      username: {
+        in: ['admin', 'administrator'],
+      },
+    },
+    orderBy: {
+      username: 'asc',
+    },
   });
 
   if (existing) {
     await prisma.user.update({
-      where: { username: 'administrator' },
+      where: { id: existing.id },
       data: {
-        displayName: 'Administrator',
+        username: 'admin',
+        passwordHash: hashPassword('test'),
+        displayName: 'Admin',
       },
     });
     return;
@@ -26,9 +35,9 @@ async function main() {
 
   await prisma.user.create({
     data: {
-      username: 'administrator',
-      passwordHash: hashPassword('password'),
-      displayName: 'Administrator',
+      username: 'admin',
+      passwordHash: hashPassword('test'),
+      displayName: 'Admin',
     },
   });
 }

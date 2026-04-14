@@ -2,12 +2,16 @@ import { useState } from 'react';
 import { Eye, EyeOff, LockKeyhole, UserRound, Video } from 'lucide-react';
 
 type LoginScreenProps = {
-  onSignIn: (payload: { username: string; password: string; category: string }) => Promise<void>;
+  onSignIn: (payload: {
+    username: string;
+    password: string;
+    category: string;
+  }) => Promise<void>;
 };
 
 export function LoginScreen({ onSignIn }: LoginScreenProps) {
-  const [username, setUsername] = useState('administrator');
-  const [password, setPassword] = useState('password');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [category, setCategory] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,8 +35,6 @@ export function LoginScreen({ onSignIn }: LoginScreenProps) {
 
     if (!password.trim()) {
       nextErrors.password = 'Please enter your password.';
-    } else if (password.trim().length < 6) {
-      nextErrors.password = 'Password must be at least 6 characters.';
     }
 
     if (!category) {
@@ -54,7 +56,7 @@ export function LoginScreen({ onSignIn }: LoginScreenProps) {
       await onSignIn({ username: username.trim(), password, category });
     } catch (error) {
       setAuthError(
-        error instanceof Error ? error.message : 'Unable to sign in right now.',
+        error instanceof Error ? error.message : 'Unable to sign in right now.'
       );
     } finally {
       setIsSubmitting(false);
@@ -62,10 +64,10 @@ export function LoginScreen({ onSignIn }: LoginScreenProps) {
   };
 
   return (
-    <div className="w-full max-w-[380px] rounded-[28px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_90px_rgba(15,23,42,0.12)] backdrop-blur sm:p-6">
+    <div className="w-full max-w-95 rounded-[28px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_90px_rgba(15,23,42,0.12)] backdrop-blur sm:p-6">
       <div className="mx-auto max-w-[320px]">
         <div className="mb-6 flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 text-white shadow-lg shadow-blue-200">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-linear-to-br from-blue-500 to-violet-600 text-white shadow-lg shadow-blue-200">
             <Video className="h-5 w-5" />
           </span>
           <div>
@@ -84,16 +86,14 @@ export function LoginScreen({ onSignIn }: LoginScreenProps) {
           </p>
         </div>
 
-        <form
-          className="mt-6 space-y-4"
-          onSubmit={handleSubmit}
-        >
+        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <Field label="Username">
             <div className="relative">
               <UserRound className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 value={username}
+                placeholder="Enter your username"
                 onChange={(e) => {
                   setUsername(e.target.value);
                   setErrors((prev) => ({ ...prev, username: undefined }));
@@ -107,7 +107,9 @@ export function LoginScreen({ onSignIn }: LoginScreenProps) {
               />
             </div>
             {errors.username ? (
-              <p className="text-sm font-medium text-red-500">{errors.username}</p>
+              <p className="text-sm font-medium text-red-500">
+                {errors.username}
+              </p>
             ) : null}
           </Field>
 
@@ -117,6 +119,7 @@ export function LoginScreen({ onSignIn }: LoginScreenProps) {
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
+                placeholder="Enter your password"
                 onChange={(e) => {
                   setPassword(e.target.value);
                   setErrors((prev) => ({ ...prev, password: undefined }));
@@ -141,7 +144,9 @@ export function LoginScreen({ onSignIn }: LoginScreenProps) {
               </button>
             </div>
             {errors.password ? (
-              <p className="text-sm font-medium text-red-500">{errors.password}</p>
+              <p className="text-sm font-medium text-red-500">
+                {errors.password}
+              </p>
             ) : null}
           </Field>
 
@@ -167,7 +172,9 @@ export function LoginScreen({ onSignIn }: LoginScreenProps) {
               </select>
             </div>
             {errors.category ? (
-              <p className="text-sm font-medium text-red-500">{errors.category}</p>
+              <p className="text-sm font-medium text-red-500">
+                {errors.category}
+              </p>
             ) : null}
           </Field>
 
@@ -180,7 +187,7 @@ export function LoginScreen({ onSignIn }: LoginScreenProps) {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="flex h-11 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-blue-500 to-violet-600 text-[15px] font-semibold text-white shadow-[0_18px_34px_rgba(59,130,246,0.26)] transition hover:translate-y-[-1px] hover:from-blue-600 hover:to-violet-700 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:from-blue-500 disabled:hover:to-violet-600"
+            className="flex h-11 w-full items-center justify-center rounded-2xl bg-linear-to-r from-blue-500 to-violet-600 text-[15px] font-semibold text-white shadow-[0_18px_34px_rgba(59,130,246,0.26)] transition hover:-translate-y-px hover:from-blue-600 hover:to-violet-700 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:from-blue-500 disabled:hover:to-violet-600"
           >
             {isSubmitting ? 'Signing in...' : 'Sign in'}
           </button>

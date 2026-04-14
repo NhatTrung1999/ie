@@ -45,6 +45,7 @@ export function StageListPanel({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const tabsScrollRef = useRef<HTMLDivElement | null>(null);
+  const itemsContainerRef = useRef<HTMLDivElement | null>(null);
   const dragStateRef = useRef({
     isMouseDown: false,
     isDragging: false,
@@ -160,7 +161,32 @@ export function StageListPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
-        <div className="flex flex-col gap-0.5">
+        <div
+          ref={itemsContainerRef}
+          className={cn('flex flex-col gap-0.5', items.length === 0 ? 'h-full' : '')}
+          onDragOver={(e) => {
+            if (!draggingId || !itemsContainerRef.current) {
+              return;
+            }
+
+            e.preventDefault();
+            const nearestId = getNearestStageItemId(itemsContainerRef.current, e.clientY);
+
+            if (nearestId && nearestId !== draggingId) {
+              setDragOverId(nearestId);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+
+            if (draggingId && dragOverId && draggingId !== dragOverId) {
+              onReorder(draggingId, dragOverId);
+            }
+
+            setDraggingId(null);
+            setDragOverId(null);
+          }}
+        >
           {errorMessage ? (
             <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700">
               {errorMessage}
@@ -173,6 +199,7 @@ export function StageListPanel({
             return (
               <div
                 key={item.id}
+                data-stage-id={item.id}
                 onClick={() => onSelectItem(item.id)}
                 draggable
                 onDragStart={(e) => {
@@ -189,18 +216,6 @@ export function StageListPanel({
                   if (draggingId && draggingId !== item.id) {
                     setDragOverId(item.id);
                   }
-                }}
-                onDragLeave={() => {
-                  if (dragOverId === item.id) {
-                    setDragOverId(null);
-                  }
-                }}
-                onDrop={() => {
-                  if (draggingId && draggingId !== item.id) {
-                    onReorder(draggingId, item.id);
-                  }
-                  setDraggingId(null);
-                  setDragOverId(null);
                 }}
                 className={cn(
                   'group relative flex cursor-pointer items-center gap-2 rounded-xl border px-2 py-2 transition-all duration-200',
@@ -221,14 +236,22 @@ export function StageListPanel({
                   <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-linear-to-b from-blue-500 to-violet-500" />
                 ) : null}
 
-                <GripVertical
-                  className={cn(
-                    'h-3.5 w-3.5 shrink-0 cursor-grab transition active:cursor-grabbing',
-                    isActive
-                      ? 'text-blue-300'
-                      : 'text-gray-200 group-hover:text-gray-400',
-                  )}
-                />
+                <button
+                  type="button"
+                  title="Drag to reorder"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className="shrink-0 rounded-md p-0.5"
+                >
+                  <GripVertical
+                    className={cn(
+                      'h-3.5 w-3.5 cursor-grab transition active:cursor-grabbing',
+                      isActive
+                        ? 'text-blue-300'
+                        : 'text-gray-200 group-hover:text-gray-400',
+                    )}
+                  />
+                </button>
 
                 <div
                   className={cn(
@@ -274,18 +297,37 @@ export function StageListPanel({
           })}
 
           {items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-6">
+            <div className="flex flex-1 flex-col items-center justify-center gap-2 py-6">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100">
                 <FileVideo className="h-5 w-5 text-gray-300" />
               </div>
               <p className="text-[11px] text-gray-400">No stages yet</p>
-              <button className="text-[11px] font-medium text-blue-500 transition hover:text-blue-600">
-                + Add your first stage
-              </button>
             </div>
           ) : null}
         </div>
       </div>
     </div>
   );
+}
+
+function getNearestStageItemId(container: HTMLDivElement, clientY: number) {
+  const items = Array.from(
+    container.querySelectorAll<HTMLElement>('[data-stage-id]'),
+  );
+
+  let nearestId: string | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  items.forEach((item) => {
+    const rect = item.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    const distance = Math.abs(clientY - midpoint);
+
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearestId = item.dataset.stageId ?? null;
+    }
+  });
+
+  return nearestId;
 }
