@@ -186,9 +186,7 @@ export function DashboardPage({
   );
 
   useEffect(() => {
-    const selectedStageItem = orderedStageItems.find((item) => item.id === selectedItemId);
-
-    if (!selectedStageItem) {
+    if (!selectedItem) {
       void dispatch(
         loadTableRows({
           stage: activeStage,
@@ -199,12 +197,13 @@ export function DashboardPage({
 
     void dispatch(
       loadTableRows({
-        stage: selectedStageItem.stage,
-        stageCode: selectedStageItem.code,
-        stageItemId: selectedStageItem.id,
+        stage: selectedItem.stage,
+        stageCode: selectedItem.code,
+        stageItemId: selectedItem.id,
       }),
     );
-  }, [activeStage, dispatch, orderedStageItems, selectedItemId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStage, dispatch, selectedItem?.code, selectedItem?.stage, selectedItemId]);
 
   useEffect(() => {
     if (!selectedItem?.id) {

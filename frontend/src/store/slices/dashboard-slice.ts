@@ -285,12 +285,11 @@ const dashboardSlice = createSlice({
       }>,
     ) {
       const { stage, reorderedScoped } = action.payload;
-      const reorderedIds = reorderedScoped.map((item) => item.id);
+      const reorderedQueue = [...reorderedScoped];
 
       state.orderedStageItems = state.orderedStageItems.map((item) => {
         if (item.stage !== stage) return item;
-        const nextIndex = reorderedIds.indexOf(item.id);
-        return nextIndex === -1 ? item : reorderedScoped[nextIndex];
+        return reorderedQueue.shift() ?? item;
       });
     },
     setStageItemsError(state, action: PayloadAction<string>) {
