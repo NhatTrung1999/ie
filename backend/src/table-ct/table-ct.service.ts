@@ -546,6 +546,9 @@ export class TableCtService implements OnModuleInit {
     const lossRateByMachineType = new Map(
       machineTypes.map((item) => [item.label, parseLossRate(item.loss ?? '')]),
     );
+    const labelsByMachineType = new Map(
+      machineTypes.map((item) => [item.label, { labelCn: item.labelCn, labelVn: item.labelVn }]),
+    );
 
     const mappedRows = orderedRows.map((row) => this.mapRow(row));
     const estimateOutputPairs =
@@ -578,7 +581,7 @@ export class TableCtService implements OnModuleInit {
       mappedRows,
       normalizedStage,
       lossRateByMachineType,
-      category,
+      labelsByMachineType,
     );
 
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
@@ -1358,10 +1361,8 @@ function populateLsaDetailSection(
   rows: ReturnType<TableCtService['mapRow']>[],
   stage: string,
   lossRateByMachineType: Map<string, number>,
-  category?: string,
+  labelsByMachineType: Map<string, { labelCn: string | null; labelVn: string | null }>,
 ) {
-  void category;
-
   const section = LSA_TEMPLATE_SECTION_BY_STAGE[stage];
   if (!section) {
     throw new BadRequestException(`Unsupported LSA stage "${stage}".`);
@@ -1390,6 +1391,7 @@ function populateLsaDetailSection(
       section.startRow + index,
       rows[index],
       lossRateByMachineType,
+      labelsByMachineType,
     );
   }
 }
@@ -1436,16 +1438,10 @@ function hideLsaColumnDisplayValues(worksheet: ExcelJS.Worksheet, columnKey: str
 }
 
 function ensureLsaVisibleTextColor(worksheet: ExcelJS.Worksheet) {
-  const sectionHeaderRows = new Set([8, 37, 88]);
-
   for (let rowNumber = 1; rowNumber <= worksheet.rowCount; rowNumber += 1) {
     for (let colNumber = 1; colNumber <= worksheet.columnCount; colNumber += 1) {
       const cell = worksheet.getCell(rowNumber, colNumber);
       if (cell.value == null || cell.value === '') {
-        continue;
-      }
-
-      if (sectionHeaderRows.has(rowNumber)) {
         continue;
       }
 
@@ -1495,8 +1491,20 @@ function fillLsaInputRow(
   rowNumber: number,
   row: ReturnType<TableCtService['mapRow']>,
   lossRateByMachineType: Map<string, number>,
+  labelsByMachineType: Map<string, { labelCn: string | null; labelVn: string | null }>,
 ) {
   const lossRate = lossRateByMachineType.get(row.machineType) ?? 0;
+  const labels = labelsByMachineType.get(row.machineType);
+
+  let machineLabel: string;
+  if (row.machineType === 'Select..') {
+    machineLabel = '';
+  } else if (labels?.labelCn || labels?.labelVn) {
+    const parts = [labels.labelVn, labels.labelCn].filter(Boolean);
+    machineLabel = parts.join('-');
+  } else {
+    machineLabel = row.machineType;
+  }
 
   worksheet.getCell(`A${rowNumber}`).value = row.no;
   worksheet.getCell(`B${rowNumber}`).value = row.partName;
@@ -1504,8 +1512,8 @@ function fillLsaInputRow(
   worksheet.getCell(`D${rowNumber}`).value = roundToTwoDecimals(sumValues(row.nvaValues));
   worksheet.getCell(`E${rowNumber}`).value = roundToTwoDecimals(lossRate);
   worksheet.getCell(`J${rowNumber}`).value = '';
-  worksheet.getCell(`M${rowNumber}`).value =
-    row.machineType === 'Select..' ? '' : row.machineType;
+  worksheet.getCell(`M${rowNumber}`).value = machineLabel;
+
   ensureLsaInputRowBorders(worksheet, rowNumber);
 }
 

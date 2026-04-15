@@ -130,6 +130,7 @@ function SortableCtRowGroup({
       style={style}
       className={cn(
         'transform-gpu will-change-transform',
+        openMachineDropdownId === row.id ? 'relative z-30' : '',
         sortableDragging || isDragging ? 'relative z-10' : '',
       )}
     >
@@ -292,7 +293,7 @@ function SortableCtRowGroup({
 
                   {openMachineDropdownId === row.id && !row.confirmed ? (
                     <div
-                      className="absolute left-0 top-[calc(100%+0.25rem)] z-20 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.16)]"
+                      className="absolute left-0 top-[calc(100%+0.25rem)] z-50 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.16)]"
                       onMouseDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -835,7 +836,7 @@ export function CtTablePanel({
             </div>
           ) : null}
           <table className="w-full min-w-310 border-collapse">
-            <thead className="sticky top-0 z-10 bg-gray-50">
+            <thead className="sticky top-0 z-40 bg-gray-50">
               <tr className="border-b border-gray-100">
                 <th className="w-6 py-2" />
                 <th className="w-10 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
