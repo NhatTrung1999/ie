@@ -82,6 +82,28 @@ export class StageController {
     return this.stageService.duplicateStage(payload, request.user);
   }
 
+  /**
+   * Offline mode endpoint: tạo stage với local file path
+   * Không cần upload, chỉ lưu đường dẫn file
+   */
+  @Post('local')
+  createStageLocal(
+    @Body()
+    payload: {
+      date?: string;
+      season?: string;
+      stageCode?: string;
+      cutDie?: string;
+      area: string;
+      article?: string;
+      filePath: string;
+    },
+    @Req()
+    request: Request & { user?: JwtUserPayload },
+  ) {
+    return this.stageService.createStageLocal(payload, request.user);
+  }
+
   @Patch('reorder')
   reorderStages(
     @Body() payload: ReorderStageDto,

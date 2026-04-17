@@ -1,0 +1,179 @@
+generator client {
+  provider   = "prisma-client-js"
+  output     = "../node_modules/.prisma/client-sqlite"
+  engineType = "library"
+}
+
+datasource db {
+  provider   = "sqlite"
+}
+
+model DeviceIdentity {
+  id        String   @id @default(cuid())
+  ip        String
+  hostname  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("DeviceIdentity")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  displayName  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("User")
+}
+
+model StageList {
+  id           String    @id @default(cuid())
+  remoteId     String?
+  ownerUserId  String?
+  code         String
+  name         String
+  season       String?
+  cutDie       String?
+  area         String?
+  article      String?
+  duration     String
+  mood         String
+  stage        String
+  filePath     String?
+  stageDate    DateTime?
+  sortOrder    Int
+  createdByIp  String?
+  syncStatus   String    @default("pending")
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("StageList")
+}
+
+model StageCategory {
+  id           String    @id @default(cuid())
+  remoteId     String?
+  value        String    @unique
+  label        String
+  sortOrder    Int
+  isActive     Boolean   @default(true)
+  syncStatus   String    @default("pending")
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("StageCategory")
+}
+
+model MachineType {
+  id           String    @id @default(cuid())
+  remoteId     String?
+  department   String
+  label        String
+  labelCn      String?
+  labelVn      String?
+  loss         String?
+  sortOrder    Int
+  isActive     Boolean   @default(true)
+  syncStatus   String    @default("pending")
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("MachineType")
+}
+
+model TableCT {
+  id           String    @id @default(cuid())
+  remoteId     String?
+  stageItemId  String?
+  no           String
+  partName     String
+  stage        String
+  ct1          Float
+  ct2          Float
+  ct3          Float
+  ct4          Float
+  ct5          Float
+  ct6          Float
+  ct7          Float
+  ct8          Float
+  ct9          Float
+  ct10         Float
+  vaCt1        Float     @default(0)
+  vaCt2        Float     @default(0)
+  vaCt3        Float     @default(0)
+  vaCt4        Float     @default(0)
+  vaCt5        Float     @default(0)
+  vaCt6        Float     @default(0)
+  vaCt7        Float     @default(0)
+  vaCt8        Float     @default(0)
+  vaCt9        Float     @default(0)
+  vaCt10       Float     @default(0)
+  machineType  String
+  confirmed    Boolean
+  done         Boolean   @default(false)
+  sortOrder    Int
+  createdByIp  String?
+  syncStatus   String    @default("pending")
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("TableCT")
+}
+
+model HistoryEntry {
+  id           String    @id @default(cuid())
+  remoteId     String?
+  stageItemId  String?
+  stageCode    String
+  startTime    Float
+  endTime      Float
+  type         String
+  value        Float
+  committed    Boolean   @default(false)
+  createdByIp  String?
+  syncStatus   String    @default("pending")
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("HistoryPlayback")
+}
+
+model ControlSession {
+  id           String    @id @default(cuid())
+  remoteId     String?
+  stageItemId  String?   @unique
+  stageCode    String
+  elapsed      Float
+  isRunning    Boolean
+  segmentStart Float
+  nva          Float?
+  va           Float?
+  skip         Float?
+  createdByIp  String?
+  syncStatus   String    @default("pending")
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("ControlPanel")
+}
+
+model SyncLog {
+  id          String   @id @default(cuid())
+  syncedAt    DateTime @default(now())
+  direction   String
+  tableName   String
+  recordCount Int
+  success     Boolean
+  error       String?
+
+  @@map("SyncLog")
+}

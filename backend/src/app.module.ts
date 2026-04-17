@@ -15,17 +15,24 @@ import { StageCategoryModule } from './stage-category/stage-category.module';
 import { TableCtModule } from './table-ct/table-ct.module';
 import { UsersModule } from './users/users.module';
 import { validate } from './config/env.validation';
+import { IdentityModule } from './identity/identity.module';
+import { SyncModule } from './sync/sync.module';
+import { RemoteSyncController } from './sync/remote-sync.controller';
+
+const isOffline = process.env.OFFLINE_MODE === 'true';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      // Offline mode đọc .env.offline, online đọc .env bình thường
+      envFilePath: isOffline ? ['.env.offline', '.env'] : '.env',
       validate,
     }),
     PrismaModule,
     DeleteLogModule,
     UsersModule,
+    // AuthModule vẫn load nhưng guards sẽ bypass khi offline
     AuthModule,
     ControlSessionModule,
     HistoryModule,
@@ -33,8 +40,14 @@ import { validate } from './config/env.validation';
     StageCategoryModule,
     StageModule,
     TableCtModule,
+    // Offline-only modules
+    ...(isOffline ? [IdentityModule, SyncModule] : []),
   ],
-  controllers: [AppController],
+  controllers: [
+    AppController,
+    // Online server thêm RemoteSyncController để nhận data từ offline clients
+    ...(!isOffline ? [RemoteSyncController] : []),
+  ],
   providers: [
     AppService,
     {
@@ -44,3 +57,5 @@ import { validate } from './config/env.validation';
   ],
 })
 export class AppModule {}
+
+

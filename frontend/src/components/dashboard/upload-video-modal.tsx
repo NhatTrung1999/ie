@@ -4,17 +4,20 @@ import {
   ChevronLeft,
   ChevronRight,
   FileVideo,
+  FolderOpen,
   Upload,
   X,
 } from 'lucide-react';
 
 import type { StageCategory, StageKey } from '@/types/dashboard';
+import { isElectron, electronBridge } from '@/lib/electron-bridge';
 
 type UploadVideoModalProps = {
   open: boolean;
   categories: StageCategory[];
   defaultArea: StageKey;
   onClose: () => void;
+  // Online mode: nhận File[]
   onUpload: (payload: {
     date: string;
     season: string;
@@ -25,6 +28,16 @@ type UploadVideoModalProps = {
     files: File[];
     onProgress?: (percent: number) => void;
     signal?: AbortSignal;
+  }) => Promise<void>;
+  // Offline mode: nhận local file path thay vì File object
+  onSelectLocalVideo?: (payload: {
+    date: string;
+    season: string;
+    stageCode: string;
+    cutDie: string;
+    area: StageKey;
+    article: string;
+    filePath: string;
   }) => Promise<void>;
 };
 
@@ -48,7 +61,9 @@ export function UploadVideoModal({
   defaultArea,
   onClose,
   onUpload,
+  onSelectLocalVideo,
 }: UploadVideoModalProps) {
+  const offline = isElectron();
   const maxFiles = 5;
   const today = useMemo(() => new Date(), []);
   const [date, setDate] = useState(today);
@@ -59,6 +74,8 @@ export function UploadVideoModal({
   const [article, setArticle] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [fileNames, setFileNames] = useState<string[]>([]);
+  // Offline: lưu local path thay vì File object
+  const [localFilePath, setLocalFilePath] = useState<string | null>(null);
   const [fileError, setFileError] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -89,6 +106,7 @@ export function UploadVideoModal({
     setArticle('');
     setFiles([]);
     setFileNames([]);
+    setLocalFilePath(null);
     setFileError('');
     setSubmitError('');
     setIsSubmitting(false);
@@ -101,6 +119,23 @@ export function UploadVideoModal({
 
     try {
       setIsSubmitting(true);
+
+      // Offline mode: dùng local file path thay vì upload
+      if (offline && onSelectLocalVideo && localFilePath) {
+        await onSelectLocalVideo({
+          date: formatDateValue(date),
+          season,
+          stageCode,
+          cutDie,
+          area,
+          article,
+          filePath: localFilePath,
+        });
+        resetForm();
+        return;
+      }
+
+      // Online mode: upload lên server
       setUploadProgress(0);
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
@@ -247,37 +282,71 @@ export function UploadVideoModal({
             />
           </Field>
 
-          <Field label="Video">
-            <label className="flex h-10 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 transition hover:border-slate-300">
-              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-500">
-                <FileVideo className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[13px] text-slate-500">
-                {fileNames.length === 0
-                  ? 'Choose video files...'
-                  : fileNames.length === 1
-                    ? fileNames[0]
-                    : `${fileNames.length} videos selected`}
-              </span>
-              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                Browse
-              </span>
-              <input
-                type="file"
-                accept="video/*"
-                multiple
-                onChange={handleFileChange}
-                className="hidden"
-              />
-            </label>
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[11px] text-slate-400">
-                Toi da {maxFiles} video moi lan upload
-              </span>
-              <span className="text-[11px] font-medium text-slate-500">
-                {fileNames.length}/{maxFiles}
-              </span>
-            </div>
+          <Field label={offline ? 'Video (Local File)' : 'Video'}>
+            {offline ? (
+              // Offline: dùng Electron file dialog
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const path = await electronBridge.selectVideo();
+                    if (path) {
+                      setLocalFilePath(path);
+                      setFileNames([path.split(/[\\/]/).pop() ?? path]);
+                      setFileError('');
+                    }
+                  }}
+                  className="flex h-10 w-full cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 transition hover:border-slate-300"
+                >
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-500">
+                    <FolderOpen className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-slate-500">
+                    {fileNames.length === 0 ? 'Chọn file video...' : fileNames[0]}
+                  </span>
+                  <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                    Browse
+                  </span>
+                </button>
+                <p className="px-1 text-[11px] text-slate-400">
+                  Chỉ lưu đường dẫn file — không copy video vào app
+                </p>
+              </div>
+            ) : (
+              // Online: dùng HTML file input thông thường
+              <>
+                <label className="flex h-10 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 transition hover:border-slate-300">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-500">
+                    <FileVideo className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-slate-500">
+                    {fileNames.length === 0
+                      ? 'Choose video files...'
+                      : fileNames.length === 1
+                        ? fileNames[0]
+                        : `${fileNames.length} videos selected`}
+                  </span>
+                  <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                    Browse
+                  </span>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    multiple
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] text-slate-400">
+                    Toi da {maxFiles} video moi lan upload
+                  </span>
+                  <span className="text-[11px] font-medium text-slate-500">
+                    {fileNames.length}/{maxFiles}
+                  </span>
+                </div>
+              </>
+            )}
             {fileError ? (
               <p className="px-1 text-[11px] font-medium text-red-500">{fileError}</p>
             ) : null}
@@ -307,11 +376,14 @@ export function UploadVideoModal({
           <div className="grid grid-cols-1 gap-2 pt-0.5 sm:grid-cols-2">
             <button
               type="submit"
-              disabled={fileNames.length === 0 || !!fileError || isSubmitting}
+              disabled={
+                (offline ? !localFilePath : fileNames.length === 0 || !!fileError) ||
+                isSubmitting
+              }
               className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(37,99,235,0.24)] transition hover:from-blue-600 hover:to-blue-700 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:shadow-none"
             >
               <Upload className="h-4 w-4" />
-              {isSubmitting ? 'Uploading...' : 'Upload'}
+              {isSubmitting ? (offline ? 'Đang lưu...' : 'Uploading...') : (offline ? 'Lưu' : 'Upload')}
             </button>
             <button
               type="button"

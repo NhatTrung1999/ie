@@ -17,12 +17,15 @@ type PreviewPanelProps = {
   selectedItem?: StageItem;
   playbackRequest?: PreviewPlaybackRequest | null;
   onPlaybackStateChange?: (state: PreviewPlaybackState) => void;
+  /** Offline mode: override video URL với local file:// path */
+  offlineVideoUrl?: string;
 };
 
 export function PreviewPanel({
   selectedItem,
   playbackRequest,
   onPlaybackStateChange,
+  offlineVideoUrl,
 }: PreviewPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -31,7 +34,9 @@ export function PreviewPanel({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
 
-  const hasVideo = Boolean(selectedItem?.videoUrl);
+  // Offline: dùng offlineVideoUrl (file:// path) nếu có, fallback về server URL
+  const effectiveVideoUrl = offlineVideoUrl ?? selectedItem?.videoUrl;
+  const hasVideo = Boolean(effectiveVideoUrl);
 
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
@@ -131,7 +136,7 @@ export function PreviewPanel({
       <video
         ref={videoRef}
         className="h-full w-full object-contain"
-        src={selectedItem?.videoUrl}
+        src={effectiveVideoUrl}
         muted
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={() => setDuration(videoRef.current?.duration || 0)}

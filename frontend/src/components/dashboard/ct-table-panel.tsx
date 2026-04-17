@@ -835,100 +835,103 @@ export function CtTablePanel({
               {tableRowsError}
             </div>
           ) : null}
-          <table className="w-full min-w-310 border-collapse">
-            <thead className="sticky top-0 z-40 bg-gray-50">
-              <tr className="border-b border-gray-100">
-                <th className="w-6 py-2" />
-                <th className="w-10 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-                  No
-                </th>
-                <th className="w-36 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-                  Part Name
-                </th>
-                <th className="w-14 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-                  Type
-                </th>
-                {CT_COLUMNS.map((col) => (
-                  <th
-                    key={col}
-                    className="w-10 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase"
-                  >
-                    {col}
-                  </th>
-                ))}
-                <th className="w-14 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-                  Avg
-                </th>
-                <th className="w-36 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-                  Machine Type
-                </th>
-                <th className="w-16 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-                  Confirm
-                </th>
-                <th className="w-16 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
-                  Action
-                </th>
-              </tr>
-            </thead>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={({ active }) => setActiveDragRowId(String(active.id))}
+            onDragCancel={() => setActiveDragRowId(null)}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={rows.map((row) => row.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <table className="w-full min-w-310 border-collapse">
+                <thead className="sticky top-0 z-40 bg-gray-50">
+                  <tr className="border-b border-gray-100">
+                    <th className="w-6 py-2" />
+                    <th className="w-10 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                      No
+                    </th>
+                    <th className="w-36 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                      Part Name
+                    </th>
+                    <th className="w-14 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                      Type
+                    </th>
+                    {CT_COLUMNS.map((col) => (
+                      <th
+                        key={col}
+                        className="w-10 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase"
+                      >
+                        {col}
+                      </th>
+                    ))}
+                    <th className="w-14 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                      Avg
+                    </th>
+                    <th className="w-36 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                      Machine Type
+                    </th>
+                    <th className="w-16 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                      Confirm
+                    </th>
+                    <th className="w-16 py-2 text-center text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
 
-            {rows.length === 0 ? (
-              <tbody>
-                <tr>
-                  <td
-                    colSpan={CT_COLUMNS.length + 9}
-                    className="h-55 px-4 py-10 align-middle"
-                  >
-                    <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-100">
-                        <FileSpreadsheet className="h-4 w-4 text-gray-300" />
-                      </div>
-                      <p className="text-[11px] text-gray-400">No data</p>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            ) : (
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragStart={({ active }) => setActiveDragRowId(String(active.id))}
-                onDragCancel={() => setActiveDragRowId(null)}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext
-                  items={rows.map((row) => row.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {rows.map((row) => (
-                    <SortableCtRowGroup
-                      key={row.id}
-                      row={row}
-                      isActive={activeRowStageItemId === (row.stageItemId ?? null)}
-                      isDragging={activeDragRowId === row.id}
-                      machineTypeOptions={machineTypeOptions}
-                      machineTypeQueries={machineTypeQueries}
-                      openMachineDropdownId={openMachineDropdownId}
-                      selectedCtCell={selectedCtCell}
-                      sessionCategory={sessionCategory}
-                      dispatch={dispatch}
-                      onSelectRow={handleToggleRowSelection}
-                      onToggleStageItemActive={onToggleStageItemActive}
-                      onSetMachineDropdown={setOpenMachineDropdownId}
-                      onSetMachineQueries={setMachineTypeQueries}
-                      onMachineTypeQueryChange={handleMachineTypeQueryChange}
-                      onMachineTypeQueryBlur={handleMachineTypeQueryBlur}
-                      onMachineTypeSelect={handleMachineType}
-                      onConfirm={handleConfirm}
-                      onDone={handleDone}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
-            )}
-          </table>
+                {rows.length === 0 ? (
+                  <tbody>
+                    <tr>
+                      <td
+                        colSpan={CT_COLUMNS.length + 9}
+                        className="h-55 px-4 py-10 align-middle"
+                      >
+                        <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gray-100">
+                            <FileSpreadsheet className="h-4 w-4 text-gray-300" />
+                          </div>
+                          <p className="text-[11px] text-gray-400">No data</p>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                ) : (
+                  <>
+                    {rows.map((row) => (
+                      <SortableCtRowGroup
+                        key={row.id}
+                        row={row}
+                        isActive={activeRowStageItemId === (row.stageItemId ?? null)}
+                        isDragging={activeDragRowId === row.id}
+                        machineTypeOptions={machineTypeOptions}
+                        machineTypeQueries={machineTypeQueries}
+                        openMachineDropdownId={openMachineDropdownId}
+                        selectedCtCell={selectedCtCell}
+                        sessionCategory={sessionCategory}
+                        dispatch={dispatch}
+                        onSelectRow={handleToggleRowSelection}
+                        onToggleStageItemActive={onToggleStageItemActive}
+                        onSetMachineDropdown={setOpenMachineDropdownId}
+                        onSetMachineQueries={setMachineTypeQueries}
+                        onMachineTypeQueryChange={handleMachineTypeQueryChange}
+                        onMachineTypeQueryBlur={handleMachineTypeQueryBlur}
+                        onMachineTypeSelect={handleMachineType}
+                        onConfirm={handleConfirm}
+                        onDone={handleDone}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </>
+                )}
+              </table>
+            </SortableContext>
+          </DndContext>
         </div>
       </div>
+
 
       {isLsaExportOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/25 px-4 backdrop-blur-[2px]">

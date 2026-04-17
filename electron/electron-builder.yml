@@ -1,0 +1,73 @@
+appId: com.ie-app.offline
+productName: IE Offline
+copyright: Copyright © 2025 IE
+
+directories:
+  output: dist-electron
+  buildResources: build
+
+files:
+  - dist/**/*
+  - "!node_modules"
+
+extraResources:
+  # Bundle template database
+  - from: "../backend/ie-offline.db"
+    to: "backend/ie-offline.db"
+  # Bundle Excel templates
+  - from: "../backend/templates"
+    to: "backend/templates"
+    filter:
+      - "**/*"
+  # Bundle backend build
+  - from: "../backend/dist"
+    to: "backend"
+    filter:
+      - "**/*"
+  # Bundle frontend static files
+  - from: "../frontend/dist"
+    to: "frontend/dist"
+    filter:
+      - "**/*"
+  # Bundle backend node_modules (chỉ production)
+  - from: "../backend/node_modules"
+    to: "backend/node_modules"
+    filter:
+      - "**/*"
+      - "!**/*.map"
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  artifactName: IE-Offline-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: IE Offline
+  license: null
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: build/icon.icns
+  category: public.app-category.productivity
+  artifactName: IE-Offline-${version}.${ext}
+
+dmg:
+  title: IE Offline
+  background: build/dmg-background.png
+  icon: build/icon.icns
+  window:
+    width: 540
+    height: 380
+
+publish: null

@@ -56,6 +56,16 @@ function createUploadFileName(originalName: string) {
 }
 
 export function getStageVideoUrl(filePath: string) {
+  // Offline mode: đường dẫn tuyệt đối (local file) — trả về nguyên bản
+  // Frontend (Electron) sẽ chuyển thành file:// URL qua electronBridge.getVideoUrl()
+  const isAbsolutePath =
+    filePath.startsWith('/') ||
+    /^[A-Za-z]:[\\/]/.test(filePath);
+
+  if (isAbsolutePath) {
+    return filePath;
+  }
+
   const relativePath = relative(join(process.cwd(), 'uploads'), filePath)
     .split('\\')
     .join('/');

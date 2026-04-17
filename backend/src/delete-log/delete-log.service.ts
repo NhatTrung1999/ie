@@ -23,10 +23,12 @@ export class DeleteLogService implements OnModuleInit {
   constructor(private readonly prismaService: PrismaService) {}
 
   async onModuleInit() {
+    if (process.env.OFFLINE_MODE === 'true') return;
     await this.ensureTable();
   }
 
   async logDelete(payload: DeleteLogPayload) {
+    if (process.env.OFFLINE_MODE === 'true') return;
     await this.ensureTable();
 
     await this.prismaService.$executeRaw(
@@ -52,6 +54,7 @@ export class DeleteLogService implements OnModuleInit {
   }
 
   async listLogs(filters: ListDeleteLogsFilters = {}) {
+    if (process.env.OFFLINE_MODE === 'true') return { logs: [] };
     await this.ensureTable();
 
     const conditions: Prisma.Sql[] = [];

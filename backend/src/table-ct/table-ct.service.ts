@@ -444,7 +444,8 @@ export class TableCtService implements OnModuleInit {
       : null;
 
     const workbook = new ExcelJS.Workbook();
-    const templatePath = join(process.cwd(), 'templates', 'excel-time-study-template.xlsx');
+    const templatesDir = process.env.TEMPLATES_PATH || join(process.cwd(), 'templates');
+    const templatePath = join(templatesDir, 'excel-time-study-template.xlsx');
     await workbook.xlsx.readFile(templatePath);
 
     const worksheet = workbook.getWorksheet('Time Study') ?? workbook.worksheets[0];
@@ -528,7 +529,8 @@ export class TableCtService implements OnModuleInit {
       : null;
 
     const workbook = new ExcelJS.Workbook();
-    const templatePath = join(process.cwd(), 'templates', 'excel-lsa-template.xlsx');
+    const templatesDir = process.env.TEMPLATES_PATH || join(process.cwd(), 'templates');
+    const templatePath = join(templatesDir, 'excel-lsa-template.xlsx');
     await workbook.xlsx.readFile(templatePath);
 
     const worksheet = workbook.getWorksheet('LSA') ?? workbook.worksheets[0];

@@ -8,15 +8,18 @@ import {
   type SessionUser,
 } from '@/lib/storage';
 import { getCurrentUser, loginRequest } from '@/services/auth';
+import { isElectron } from '@/lib/electron-bridge';
+import { apiClient } from '@/lib/api-client';
 
 type AuthState = {
   isAuthenticated: boolean;
-  sessionUser: SessionUser;
+  sessionUser: SessionUser & { ip?: string; hostname?: string };
   isBootstrapping: boolean;
 };
 
 const initialState: AuthState = {
-  isAuthenticated: Boolean(getStoredToken()),
+  // Trong Electron offline mode: luôn authenticated (không cần login)
+  isAuthenticated: isElectron() || Boolean(getStoredToken()),
   sessionUser: getStoredSessionUser(),
   isBootstrapping: true,
 };
@@ -24,6 +27,27 @@ const initialState: AuthState = {
 export const bootstrapSession = createAsyncThunk(
   'auth/bootstrapSession',
   async (_, { rejectWithValue }) => {
+    // Offline (Electron): không cần token, lấy identity từ IP
+    if (isElectron()) {
+      try {
+        const { data } = await apiClient.get<{ ip: string; hostname: string }>('/identity');
+        return {
+          username: data.hostname || data.ip,
+          category: data.ip,
+          ip: data.ip,
+          hostname: data.hostname,
+        } as SessionUser & { ip: string; hostname: string };
+      } catch {
+        return {
+          username: 'Offline',
+          category: '127.0.0.1',
+          ip: '127.0.0.1',
+          hostname: 'offline',
+        };
+      }
+    }
+
+    // Online mode: kiểm tra JWT token
     const token = getStoredToken();
 
     if (!token) {
@@ -73,6 +97,9 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     signOut(state) {
+      // Trong offline mode: không cho sign out (không có login)
+      if (isElectron()) return;
+
       clearStoredSession();
       state.isAuthenticated = false;
       state.sessionUser = { username: 'Administrator', category: 'FF28' };
@@ -90,8 +117,13 @@ const authSlice = createSlice({
         state.isBootstrapping = false;
       })
       .addCase(bootstrapSession.rejected, (state) => {
-        clearStoredSession();
-        state.isAuthenticated = false;
+        if (!isElectron()) {
+          clearStoredSession();
+          state.isAuthenticated = false;
+        } else {
+          // Offline: vẫn authenticated dù bootstrap fail
+          state.isAuthenticated = true;
+        }
         state.isBootstrapping = false;
       })
       .addCase(signIn.fulfilled, (state, action) => {

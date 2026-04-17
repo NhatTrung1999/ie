@@ -14,15 +14,18 @@ import {
   type PreviewPlaybackRequest,
   type PreviewPlaybackState,
 } from '@/components/dashboard/preview-panel';
+import { ShareDataModal } from '@/components/dashboard/share-data-modal';
 import { StageListPanel } from '@/components/dashboard/stage-list-panel';
 import { TopBar } from '@/components/dashboard/top-bar';
 import { UploadVideoModal } from '@/components/dashboard/upload-video-modal';
 import { DashboardLayout } from '@/components/layouts/dashboard-layout';
+import { isElectron, electronBridge } from '@/lib/electron-bridge';
 import { fetchStageCategories } from '@/services/stage-categories';
 import { createStages, deleteStage, fetchStages, reorderStages } from '@/services/stages';
+import { apiClient } from '@/lib/api-client';
 import { reorderTableCtRows } from '@/services/table-ct';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-  import {
+import {
   loadHistoryItems,
   appendStageItems,
   loadStages as loadStagesThunk,
@@ -101,6 +104,7 @@ export function DashboardPage({
   const [isCreateUserOpen, setIsCreateUserOpen] = useState(false);
   const [isDeleteLogsOpen, setIsDeleteLogsOpen] = useState(false);
   const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
+  const [isShareDataOpen, setIsShareDataOpen] = useState(false);
   const [activeLinkedItemId, setActiveLinkedItemId] = useState<string | null>(null);
   const [hideCompletedStageItems, setHideCompletedStageItems] = useState(false);
   const [deletedHistoryItem, setDeletedHistoryItem] = useState<HistoryItem | null>(null);
@@ -113,6 +117,9 @@ export function DashboardPage({
   const [stageFilters, setStageFilters] = useState<StageFilters>(() =>
     getFiltersFromSearchParams(searchParams),
   );
+  // Offline: lưu video URL (file:// path) cho preview
+  const [offlineVideoUrl, setOfflineVideoUrl] = useState<string | undefined>(undefined);
+  const offline = isElectron();
 
   useEffect(() => {
     void fetchStageCategories()
@@ -404,6 +411,44 @@ export function DashboardPage({
     setIsUploadOpen(false);
   };
 
+  /**
+   * Offline mode: tạo stage với local video path
+   * Gọi endpoint đặc biệt /stages/local thay vì upload multipart
+   */
+  const handleSelectLocalVideo = async (payload: {
+    date: string;
+    season: string;
+    stageCode: string;
+    cutDie: string;
+    area: StageKey;
+    article: string;
+    filePath: string;
+  }) => {
+    // Lấy video URL dạng file:// từ Electron
+    const videoUrl = await electronBridge.getVideoUrl(payload.filePath);
+
+    // Tạo stage với filePath local
+    const { data } = await apiClient.post<{ stages?: StageItem[] }>('/stages/local', {
+      date: payload.date,
+      season: payload.season,
+      stageCode: payload.stageCode,
+      cutDie: payload.cutDie,
+      area: payload.area,
+      article: payload.article,
+      filePath: payload.filePath,
+    });
+
+    const refreshedItems = await fetchStages(stageFilters);
+    dispatch(setStageItems(refreshedItems));
+    dispatch(setActiveStage(payload.area));
+
+    // Set video URL cho preview
+    if (data.stages?.[0]) {
+      setOfflineVideoUrl(videoUrl);
+    }
+    setIsUploadOpen(false);
+  };
+
   const handleDeleteStage = async (id: string) => {
     const targetItem = orderedStageItems.find((item) => item.id === id);
     if (!targetItem) return;
@@ -465,6 +510,7 @@ export function DashboardPage({
           onOpenCreateUser={() => setIsCreateUserOpen(true)}
           onOpenDeleteLogs={() => setIsDeleteLogsOpen(true)}
           onOpenManageStageCategories={() => setIsManageCategoriesOpen(true)}
+          onOpenShareData={offline ? () => setIsShareDataOpen(true) : undefined}
           onSignOut={onSignOut}
           displayName={displayName}
           subtitle={subtitle}
@@ -530,6 +576,7 @@ export function DashboardPage({
             selectedItem={selectedItem}
             playbackRequest={playbackRequest}
             onPlaybackStateChange={setPlaybackState}
+            offlineVideoUrl={offlineVideoUrl}
           />
           <CtTablePanel
             rows={visibleTableRows}
@@ -585,26 +632,34 @@ export function DashboardPage({
             defaultArea={activeStage}
             onClose={() => setIsUploadOpen(false)}
             onUpload={handleUpload}
+            onSelectLocalVideo={offline ? handleSelectLocalVideo : undefined}
           />
-      <CreateUserModal
-        open={isCreateUserOpen}
-        onClose={() => setIsCreateUserOpen(false)}
-      />
-      <DeleteLogsModal
-        open={isDeleteLogsOpen}
-        onClose={() => setIsDeleteLogsOpen(false)}
-      />
-      <ManageStageCategoriesModal
-        open={isManageCategoriesOpen}
-        onClose={() => setIsManageCategoriesOpen(false)}
-        onChanged={(categories) => {
-          dispatch(setStageCategories(categories));
-          if (!categories.some((category) => category.value === activeStage)) {
-            const nextStage = categories[0]?.value ?? '';
-            dispatch(setActiveStage(nextStage));
-          }
-        }}
-      />
+          {/* Share Data Modal — Offline only */}
+          {offline && (
+            <ShareDataModal
+              open={isShareDataOpen}
+              onClose={() => setIsShareDataOpen(false)}
+            />
+          )}
+          <CreateUserModal
+            open={isCreateUserOpen}
+            onClose={() => setIsCreateUserOpen(false)}
+          />
+          <DeleteLogsModal
+            open={isDeleteLogsOpen}
+            onClose={() => setIsDeleteLogsOpen(false)}
+          />
+          <ManageStageCategoriesModal
+            open={isManageCategoriesOpen}
+            onClose={() => setIsManageCategoriesOpen(false)}
+            onChanged={(categories) => {
+              dispatch(setStageCategories(categories));
+              if (!categories.some((category) => category.value === activeStage)) {
+                const nextStage = categories[0]?.value ?? '';
+                dispatch(setActiveStage(nextStage));
+              }
+            }}
+          />
         </>
       }
     />

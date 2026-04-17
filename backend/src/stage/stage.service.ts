@@ -19,7 +19,7 @@ export class StageService implements OnModuleInit {
     private readonly prismaService: PrismaService,
     private readonly deleteLogService: DeleteLogService,
     private readonly stageCategoryService: StageCategoryService,
-  ) {}
+  ) { }
 
   async onModuleInit() {
     ensureStageUploadDir();
@@ -85,23 +85,23 @@ export class StageService implements OnModuleInit {
     const tableRows =
       stageIds.length > 0
         ? await this.prismaService.tableCT.findMany({
-            where: {
-              OR: [
-                { stageItemId: { in: stageIds } },
-                {
-                  stageItemId: null,
-                  no: { in: filteredStages.map((item) => item.code.trim().toUpperCase()) },
-                  stage: { in: filteredStages.map((item) => (item.area ?? item.stage).trim().toUpperCase()) },
-                },
-              ],
-            },
-            select: {
-              stageItemId: true,
-              no: true,
-              stage: true,
-              done: true,
-            },
-          })
+          where: {
+            OR: [
+              { stageItemId: { in: stageIds } },
+              {
+                stageItemId: null,
+                no: { in: filteredStages.map((item) => item.code.trim().toUpperCase()) },
+                stage: { in: filteredStages.map((item) => (item.area ?? item.stage).trim().toUpperCase()) },
+              },
+            ],
+          },
+          select: {
+            stageItemId: true,
+            no: true,
+            stage: true,
+            done: true,
+          },
+        })
         : [];
     const completionMap = new Map<string, boolean>();
 
@@ -212,8 +212,8 @@ export class StageService implements OnModuleInit {
         uploadedFiles.map((file) =>
           file?.path
             ? unlink(file.path).catch(() => {
-                // Ignore cleanup failures for orphaned uploads.
-              })
+              // Ignore cleanup failures for orphaned uploads.
+            })
             : Promise.resolve(),
         ),
       );
@@ -547,16 +547,16 @@ export class StageService implements OnModuleInit {
       actor,
       entityType: 'StageList',
       entityId: targetStage.id,
-        entityLabel: `${parsedIdentity.code} - ${parsedIdentity.name}`,
-        metadata: {
-          code: parsedIdentity.code,
-          name: parsedIdentity.name,
-          season: targetStage.season ?? null,
-          cutDie: targetStage.cutDie ?? null,
-          area: targetStage.area ?? targetStage.stage,
-          stage: targetStage.stage,
-          article: targetStage.article ?? null,
-          filePath: targetStage.filePath ?? null,
+      entityLabel: `${parsedIdentity.code} - ${parsedIdentity.name}`,
+      metadata: {
+        code: parsedIdentity.code,
+        name: parsedIdentity.name,
+        season: targetStage.season ?? null,
+        cutDie: targetStage.cutDie ?? null,
+        area: targetStage.area ?? targetStage.stage,
+        stage: targetStage.stage,
+        article: targetStage.article ?? null,
+        filePath: targetStage.filePath ?? null,
       },
     });
 
@@ -567,6 +567,9 @@ export class StageService implements OnModuleInit {
   }
 
   private async ensureStageTable() {
+    // Trong offline mode (SQLite): bỏ qua SQL Server DDL
+    if (process.env.OFFLINE_MODE === 'true') return;
+
     await this.prismaService.$executeRawUnsafe(`
       IF OBJECT_ID(N'dbo.IE_StageApiUuid', N'U') IS NOT NULL
          AND OBJECT_ID(N'dbo.StageList', N'U') IS NULL
@@ -675,7 +678,11 @@ export class StageService implements OnModuleInit {
   }
 
   private async ensureSeedData() {
+    // Offline mode (SQLite): bỏ qua seed data
+    if (process.env.OFFLINE_MODE === 'true') return;
+
     const count = await this.prismaService.stageList.count();
+
 
     if (count > 0) {
       return;
@@ -747,9 +754,83 @@ export class StageService implements OnModuleInit {
       throw new NotFoundException('Stage item was not found.');
     }
   }
+  /**
+   * Offline mode: tạo stage với local file path
+   * Không upload file, chỉ lưu đường dẫn
+   */
+  async createStageLocal(
+    payload: {
+      date?: string;
+      season?: string;
+      stageCode?: string;
+      cutDie?: string;
+      area: string;
+      article?: string;
+      filePath: string;
+    },
+    actor?: JwtUserPayload,
+  ) {
+    const normalizedArea = payload.area?.trim().toUpperCase() || 'CUTTING';
+    const baseCode = payload.cutDie?.trim().toUpperCase() || 'NEW';
+    const selectedProcessStage =
+      payload.stageCode?.trim() && payload.stageCode.trim() !== 'Choose option'
+        ? payload.stageCode.trim()
+        : null;
+    const selectedStageDate = payload.date ? parseStageDate(payload.date) : new Date();
+
+    // Lấy tên file và tạo stage identity
+    const fileName = payload.filePath.split(/[\\/]/).pop() ?? 'LocalVideo';
+    const parsedIdentity = parseStageIdentity(fileName, baseCode);
+
+    const stageCount = await this.prismaService.stageList.count({
+      where: { area: normalizedArea },
+    });
+
+    const stage = await this.prismaService.stageList.create({
+      data: {
+        ownerUserId: actor?.sub ?? null,
+        code: parsedIdentity.code,
+        name: parsedIdentity.name,
+        stage: selectedProcessStage ?? normalizedArea,
+        season: payload.season?.trim() || null,
+        cutDie: payload.cutDie?.trim() || null,
+        area: normalizedArea,
+        article: payload.article?.trim() || null,
+        duration: '00:00',
+        mood: 'NVA',
+        filePath: payload.filePath, // Lưu local path
+        stageDate: selectedStageDate,
+        sortOrder: stageCount + 1,
+      },
+    });
+
+    return {
+      stages: [
+        {
+          id: stage.id,
+          code: parsedIdentity.code,
+          name: parsedIdentity.name,
+          processStage: stage.stage,
+          season: stage.season ?? '',
+          cutDie: stage.cutDie ?? '',
+          area: stage.area ?? stage.stage,
+          article: stage.article ?? '',
+          duration: stage.duration,
+          mood: stage.mood,
+          stage: stage.area ?? stage.stage,
+          stageDate: stage.stageDate?.toISOString().slice(0, 10) ?? null,
+          completed: false,
+          // VideoUrl sẽ được override bởi offlineVideoUrl ở frontend
+          videoUrl: undefined,
+        },
+      ],
+    };
+  }
+
 }
 
 function parseStageIdentity(rawName: string, fallbackCode: string) {
+
   const withoutExtension = stripFileExtension(rawName).trim();
   const normalizedFallbackCode = fallbackCode.trim().toUpperCase() || 'NEW';
   const matched = withoutExtension.match(/^([^.]+)\.\s*(.+)$/);

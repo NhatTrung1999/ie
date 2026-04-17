@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { ProtectedRoute } from '@/components/auth/protected-route';
 import { NotFoundScreen } from '@/components/common/not-found-screen';
 import { UNAUTHORIZED_EVENT } from '@/lib/api-client';
+import { isElectron } from '@/lib/electron-bridge';
 import { DashboardPage } from '@/pages/dashboard-page';
 import { LoginPage } from '@/pages/login-page';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -19,12 +20,16 @@ function App() {
   const { isAuthenticated, isBootstrapping, sessionUser } = useAppSelector(
     (state) => state.auth,
   );
+  const offline = isElectron();
 
   useEffect(() => {
     void dispatch(bootstrapSession());
   }, [dispatch]);
 
   useEffect(() => {
+    // Offline mode: không có JWT nên bỏ qua handler 401
+    if (offline) return;
+
     const handleUnauthorized = () => {
       dispatch(signOut());
       navigate('/login', { replace: true });
@@ -32,7 +37,7 @@ function App() {
 
     window.addEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
-  }, [dispatch, navigate]);
+  }, [dispatch, navigate, offline]);
 
   const handleSignIn = async (payload: {
     username: string;
@@ -61,17 +66,23 @@ function App() {
   if (isBootstrapping) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">
-        Checking session...
+        {offline ? 'Khởi động IE Offline...' : 'Checking session...'}
       </div>
     );
   }
 
+  // Offline mode: hiển thị IP như subtitle
+  const displaySubtitle = offline
+    ? ((sessionUser as any).ip ?? sessionUser.category)
+    : sessionUser.category;
+
   return (
     <Routes>
+      {/* Offline mode: /login luôn redirect về dashboard */}
       <Route
         path="/login"
         element={
-          isAuthenticated ? (
+          isAuthenticated || offline ? (
             <Navigate to="/dashboard" replace />
           ) : (
             <LoginPage onSignIn={handleSignIn} />
@@ -84,7 +95,7 @@ function App() {
           <ProtectedRoute isAuthenticated={isAuthenticated}>
             <DashboardPage
               displayName={sessionUser.username}
-              subtitle={sessionUser.category}
+              subtitle={displaySubtitle}
               onSignOut={handleSignOut}
             />
           </ProtectedRoute>
@@ -92,7 +103,7 @@ function App() {
       />
       <Route
         path="/"
-        element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />}
+        element={<Navigate to={isAuthenticated || offline ? '/dashboard' : '/login'} replace />}
       />
       <Route path="*" element={<NotFoundScreen isAuthenticated={isAuthenticated} />} />
     </Routes>
