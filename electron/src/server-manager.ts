@@ -16,7 +16,7 @@ export class ServerManager {
     const fs = require('fs');
     if (!fs.existsSync(targetDbPath) || fs.statSync(targetDbPath).size === 0) {
       console.log(`[ServerManager] Offline database is missing or empty. Copying template...`);
-      
+
       const templatePath = !isPackaged
         ? path.join(__dirname, '../../backend/ie-offline.db')
         : path.join(process.resourcesPath, 'backend/ie-offline.db');
@@ -58,7 +58,7 @@ export class ServerManager {
         PORT: String(this.port),
         DATABASE_URL: `file:${dbPath}`,
         OFFLINE_MODE: 'true',
-        REMOTE_API_URL: process.env.REMOTE_API_URL || 'http://192.168.18.42:3001/api',
+        REMOTE_API_URL: process.env.REMOTE_API_URL || 'http://192.168.18.42:3003/api',
         NODE_ENV: 'production',
         TEMPLATES_PATH: templatesPath,
         // Bỏ qua JWT validation trong offline mode

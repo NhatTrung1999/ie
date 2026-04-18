@@ -52,7 +52,7 @@ class ServerManager {
                 PORT: String(this.port),
                 DATABASE_URL: `file:${dbPath}`,
                 OFFLINE_MODE: 'true',
-                REMOTE_API_URL: process.env.REMOTE_API_URL || 'http://192.168.18.42:3001/api',
+                REMOTE_API_URL: process.env.REMOTE_API_URL || 'http://192.168.18.42:3003/api',
                 NODE_ENV: 'production',
                 TEMPLATES_PATH: templatesPath,
                 // Bỏ qua JWT validation trong offline mode

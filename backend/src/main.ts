@@ -23,12 +23,12 @@ async function bootstrap() {
     // Online: chỉ cho phép các origins đã biết
     const configuredFrontendUrl = configService.get<string>(
       'FRONTEND_URL',
-      'http://localhost:5173',
+      'http://localhost:5174',
     );
     const allowedOrigins = [
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-      'http://192.168.18.42:5173',
+      'http://localhost:5174',
+      'http://127.0.0.1:5174',
+      'http://192.168.18.42:5174',
       configuredFrontendUrl,
     ];
 
